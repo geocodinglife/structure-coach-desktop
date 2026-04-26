@@ -1,0 +1,22 @@
+/* Editor + highlight layer + tree column + toolbar. Will hold the bulk of the existing panel styles. */
+
+#sc-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#sc-titlebar {
+  padding: 12px 20px;
+  font-weight: 700;
+  border-bottom: 1px solid #eee;
+}
+
+#sc-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sc-muted);
+  font-style: italic;
+}

@@ -1,0 +1,20 @@
+/* Color tokens, typography, base resets. Will hold the variables that panel.css and overlays.css consume. */
+
+:root {
+  --sc-fg: #2a2a2a;
+  --sc-bg: #fff;
+  --sc-accent: #5c6bc0;
+  --sc-accent-soft: #ede7e0;
+  --sc-muted: #999;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--sc-fg);
+  background: var(--sc-bg);
+}
