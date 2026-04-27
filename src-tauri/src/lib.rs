@@ -126,7 +126,7 @@ async fn call_anthropic(key: &str, model: &str, prompt: &str) -> Result<String, 
     let status = res.status();
     let text = res.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!("Anthropic {}: {}", status, truncate(&text, 400)));
+        return Err(friendly_error("Anthropic", status, &text));
     }
     let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     Ok(v.pointer("/content/0/text")
@@ -153,7 +153,7 @@ async fn call_gemini(key: &str, model: &str, prompt: &str) -> Result<String, Str
     let status = res.status();
     let text = res.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!("Gemini {}: {}", status, truncate(&text, 400)));
+        return Err(friendly_error("Gemini", status, &text));
     }
     let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     Ok(v.pointer("/candidates/0/content/parts/0/text")
@@ -182,7 +182,7 @@ async fn call_openai_compat(
     let status = res.status();
     let text = res.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!("API {}: {}", status, truncate(&text, 400)));
+        return Err(friendly_error("Provider", status, &text));
     }
     let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     Ok(v.pointer("/choices/0/message/content")
@@ -200,11 +200,143 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
+fn friendly_error(provider: &str, status: reqwest::StatusCode, body: &str) -> String {
+    let detail = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| {
+            v.get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_default();
+
+    let code = status.as_u16();
+    let headline = match code {
+        401 | 403 => format!(
+            "{} rejected your API key. Check Settings — the key may be wrong, revoked, or missing permissions.",
+            provider
+        ),
+        404 => format!(
+            "{} could not find the requested model. Check the Model field in Settings.",
+            provider
+        ),
+        429 => format!(
+            "{} rate limit reached. You've hit the quota for your plan (often the free tier). Wait a minute and try again, or upgrade your plan.",
+            provider
+        ),
+        500 => format!(
+            "{} had an internal error. Try again in a moment.",
+            provider
+        ),
+        503 => format!(
+            "{} is overloaded right now. Spikes are usually temporary — try again in a moment.",
+            provider
+        ),
+        502 | 504 => format!(
+            "{} is unreachable right now ({}). Try again in a moment.",
+            provider, code
+        ),
+        _ => format!("{} returned HTTP {}.", provider, code),
+    };
+
+    if detail.is_empty() {
+        headline
+    } else {
+        let short = truncate(&detail, 240);
+        format!("{}\n\nProvider said: {}", headline, short)
+    }
+}
+
+fn toggle_window_auto(handle: &tauri::AppHandle) {
+    if let Some(window) = handle.get_webview_window("main") {
+        let is_visible = window.is_visible().unwrap_or(false);
+        if is_visible {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+fn toggle_window_force(handle: &tauri::AppHandle, show: bool) {
+    if let Some(window) = handle.get_webview_window("main") {
+        if show {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        } else {
+            let _ = window.hide();
+        }
+    }
+}
+
+use tauri::Manager;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            toggle_window_auto(app);
+        }))
         .invoke_handler(tauri::generate_handler![get_api_key, set_api_key, llm_call])
+        .setup(|app| {
+            // 1. Create Tray Menu
+            let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
+            let hide_i = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &hide_i, &quit_i])?;
+
+            // 2. Build Tray Icon
+            let mut tray_builder = TrayIconBuilder::new()
+                .menu(&menu)
+                .on_menu_event(move |app, event| {
+                    match event.id.as_ref() {
+                        "show" => { toggle_window_force(app, true); }
+                        "hide" => { toggle_window_force(app, false); }
+                        "quit" => { app.exit(0); }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        toggle_window_auto(tray.app_handle());
+                    }
+                });
+
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+
+            let _ = tray_builder.build(app);
+
+            // 3. Handle Window Close (Hide instead of Exit)
+            if let Some(window) = app.get_webview_window("main") {
+                #[cfg(debug_assertions)]
+                window.open_devtools();
+                let w = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                });
+            }
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

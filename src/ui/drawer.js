@@ -92,7 +92,8 @@ export async function refactorSelectedSentence() {
     btn.textContent = 'Refactor with AI';
     btn.disabled = false;
   } catch (err) {
-    resultDiv.textContent = 'Error: ' + err.message;
+    const msg = typeof err === 'string' ? err : (err?.message || String(err));
+    resultDiv.textContent = 'Error: ' + msg;
     resultDiv.hidden = false;
     btn.textContent = 'Retry Refactor';
     btn.disabled = false;

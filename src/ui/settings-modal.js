@@ -117,6 +117,16 @@ export function wireSettingsModal() {
       return;
     }
     showStatus(status, 'Saved to OS keyring.', 'success');
+    const banner = document.getElementById('sc-setup-banner');
+    if (banner) {
+      banner.dataset.dismissed = '1';
+      banner.style.display = 'none';
+    }
+    const settingsBtn = document.getElementById('sc-settings-btn');
+    if (settingsBtn) {
+      settingsBtn.classList.remove('sc-btn-attention');
+      settingsBtn.textContent = 'Settings';
+    }
     const refresh = window.__sc_refreshKeyState;
     if (typeof refresh === 'function') refresh();
     setTimeout(closeSettingsModal, 700);

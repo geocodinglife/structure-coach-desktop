@@ -8,7 +8,7 @@ import { makeGlyphIcon } from './glyphs.js';
 import { refactorSelectedSentence, closeDrawer } from './drawer.js';
 import { openReader, closeReader } from './overlays/reader.js';
 import { rewriteFullText, closeCompare } from './overlays/compare.js';
-import { openFixOverlay, closeFixOverlay } from './overlays/fix.js';
+import { openFixOverlay, closeFixOverlay, retryFixRow } from './overlays/fix.js';
 import { openSettingsModal, closeSettingsModal, wireSettingsModal } from './settings-modal.js';
 import { getApiKey } from '../llm/settings.js';
 import { getParamedicMethodHTML } from '../guides/paramedic.js';
@@ -42,7 +42,9 @@ export async function refreshKeyState() {
   const banner = document.getElementById('sc-setup-banner');
   const settingsBtn = document.getElementById('sc-settings-btn');
   const hasKey = Boolean(key);
-  if (banner && !banner.dataset.dismissed) banner.hidden = hasKey;
+  if (banner && !banner.dataset.dismissed) {
+    banner.style.display = hasKey ? 'none' : 'flex';
+  }
   if (settingsBtn) {
     settingsBtn.classList.toggle('sc-btn-attention', !hasKey);
     settingsBtn.textContent = hasKey ? 'Settings' : 'Settings ●';
@@ -71,10 +73,14 @@ function wireEvents(root) {
 
   document.getElementById('sc-settings-btn').addEventListener('click', openSettingsModal);
 
+  document.getElementById('sc-hide-btn').addEventListener('click', () => {
+    window.__TAURI__?.webviewWindow?.getCurrent()?.hide();
+  });
+
   document.getElementById('sc-setup-open').addEventListener('click', openSettingsModal);
   document.getElementById('sc-setup-dismiss').addEventListener('click', () => {
     const b = document.getElementById('sc-setup-banner');
-    if (b) { b.dataset.dismissed = '1'; b.hidden = true; }
+    if (b) { b.dataset.dismissed = '1'; b.style.display = 'none'; }
   });
 
   document.getElementById('sc-reader-toggle').addEventListener('click', () => {
@@ -94,6 +100,23 @@ function wireEvents(root) {
     if (t.closest('#sc-reader-close-btn, .sc-reader-close-footer')) { closeReader(); return; }
     if (t.closest('#sc-compare-close-btn')) { closeCompare(); return; }
     if (t.closest('#sc-fix-close-btn')) { closeFixOverlay(); return; }
+    if (t.closest('#sc-setup-dismiss')) {
+      const b = document.getElementById('sc-setup-banner');
+      if (b) { b.dataset.dismissed = '1'; b.style.display = 'none'; }
+      return;
+    }
+    if (t.closest('#sc-setup-open')) { openSettingsModal(); return; }
+    const fixChip = t.closest('#sc-fix-chips .sc-stat');
+    if (fixChip) {
+      const cls = fixChip.dataset.cls;
+      if (cls) openFixOverlay(cls, lastSentences, lastText);
+      return;
+    }
+    const retry = t.closest('.sc-fix-retry');
+    if (retry) {
+      retryFixRow(retry.dataset.cls, retry.dataset.key);
+      return;
+    }
   });
 
   document.getElementById('sc-compare-copy').addEventListener('click', () => {
@@ -195,7 +218,7 @@ function updateUI(input, layer) {
 function panelMarkup() {
   return `
     <div id="sc-panel" role="application" aria-label="Structure Coach">
-      <div id="sc-setup-banner" hidden>
+      <div id="sc-setup-banner" style="display: none">
         <span class="sc-setup-icon" aria-hidden="true">✨</span>
         <span class="sc-setup-text">No AI provider set up yet. Add a key (Gemini is free) or pick Ollama for local-only — then AI Rewrite and per-rule Smart Fix become active.</span>
         <button type="button" id="sc-setup-open" class="sc-btn sc-btn-primary">Open Settings</button>
@@ -214,6 +237,7 @@ function panelMarkup() {
               <div id="sc-actions">
                 <button id="sc-ai-rewrite" class="sc-btn sc-btn-primary sc-btn-ai" disabled>✨ AI Rewrite</button>
                 <button id="sc-copy" class="sc-btn sc-btn-primary" disabled>Copy</button>
+                <button id="sc-hide-btn" class="sc-btn sc-btn-secondary" title="Hide to Tray">Hide</button>
                 <button id="sc-settings-btn" class="sc-btn sc-btn-secondary" title="Settings">Settings</button>
                 <div id="sc-copied-toast" hidden>Copied!</div>
               </div>
@@ -314,6 +338,7 @@ function panelMarkup() {
             <div id="sc-fix-title">Fix</div>
             <button type="button" id="sc-fix-close-btn" class="sc-btn sc-btn-secondary">Close</button>
           </div>
+          <div id="sc-fix-chips"></div>
           <div id="sc-fix-cols-head">
             <div>Your sentence</div>
             <div>AI rewrite</div>
