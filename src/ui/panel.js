@@ -321,6 +321,15 @@ function updateUI(input, layer) {
 function panelMarkup() {
   return `
     <div id="sc-panel" role="application" aria-label="Structure Coach">
+      <header class="sc-app-header">
+        <div class="sc-app-brand">
+          <span class="sc-app-mark" aria-hidden="true">SC</span>
+          <div>
+            <h1 class="sc-app-title">Structure Coach</h1>
+            <p class="sc-app-tagline">Think clearly · write truthfully</p>
+          </div>
+        </div>
+      </header>
       <div id="sc-restore-banner" hidden>
         <span class="sc-restore-text">Restore saved work?</span>
         <button type="button" id="sc-restore-yes" class="sc-btn sc-btn-primary">Restore</button>
@@ -365,21 +374,27 @@ function panelMarkup() {
               </div>
               <div id="sc-scaffold-status" class="sc-scaffold-status" hidden role="status" aria-live="polite"></div>
             </div>
-            <div id="sc-editor-wrap">
-              <div id="sc-highlight-layer" aria-hidden="true"></div>
-              <textarea id="sc-input" placeholder="Start writing here..." aria-label="Main editor"></textarea>
+            <div class="sc-editor-section">
+              <label class="sc-section-label" for="sc-input">Your draft</label>
+              <div id="sc-editor-wrap">
+                <div id="sc-highlight-layer" aria-hidden="true"></div>
+                <textarea id="sc-input" placeholder="Write a sentence. Coaching appears as you go." aria-label="Main editor"></textarea>
+              </div>
             </div>
             <div id="sc-toolbar">
-              <div id="sc-chips-wrap">
-                <div id="sc-doc-stats" class="sc-doc-stats"></div>
+              <div class="sc-coaching-panel">
+                <div class="sc-coaching-head">
+                  <span class="sc-section-label">Coaching</span>
+                  <span id="sc-doc-stats" class="sc-doc-stats"></span>
+                </div>
                 <div id="sc-error-count"></div>
                 <div id="sc-positive-row" hidden></div>
                 <div id="sc-structure-signals" hidden></div>
               </div>
-              <div id="sc-actions">
+              <div class="sc-action-bar">
                 <span id="sc-workshop-indicator" class="sc-workshop-indicator" hidden>Rewrite in progress</span>
                 <button id="sc-ai-rewrite" class="sc-btn sc-btn-primary sc-btn-ai" disabled>Rewrite…</button>
-                <button id="sc-copy" class="sc-btn sc-btn-primary" disabled>Copy</button>
+                <button id="sc-copy" class="sc-btn sc-btn-secondary" disabled>Copy</button>
                 <button id="sc-hide-btn" class="sc-btn sc-btn-secondary" title="Hide to Tray">Hide to tray</button>
                 <button id="sc-settings-btn" class="sc-btn sc-btn-secondary" title="Settings">Settings</button>
                 <div id="sc-copied-toast" hidden>Copied!</div>
@@ -393,7 +408,7 @@ function panelMarkup() {
               <button type="button" class="sc-panel-view-btn" data-view="tree">Classic tree</button>
             </div>
             <div id="sc-structure-map">
-              <div id="sc-structure-signals-map" class="sc-structure-signals-map" hidden></div>
+              <div id="sc-structure-signals-map" class="sc-structure-signals-map" hidden aria-live="polite"></div>
               <ol id="sc-structure-list" class="sc-structure-list"></ol>
             </div>
             <div id="sc-tree-container" hidden>
