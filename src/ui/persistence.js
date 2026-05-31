@@ -19,12 +19,21 @@ export function saveMainDraft(text) {
 
 export function saveWorkshopDraft(data) {
   clearTimeout(workshopTimer);
-  workshopTimer = setTimeout(() => {
-    try {
-      if (data) localStorage.setItem(WORKSHOP_KEY, JSON.stringify(data));
-      else localStorage.removeItem(WORKSHOP_KEY);
-    } catch { /* quota */ }
-  }, DEBOUNCE_MS);
+  workshopTimer = setTimeout(() => writeWorkshopDraft(data), DEBOUNCE_MS);
+}
+
+/** Immediate write — use before LLM calls and on hide/discard. */
+export function flushWorkshopDraft(data) {
+  clearTimeout(workshopTimer);
+  workshopTimer = null;
+  writeWorkshopDraft(data);
+}
+
+function writeWorkshopDraft(data) {
+  try {
+    if (data) localStorage.setItem(WORKSHOP_KEY, JSON.stringify(data));
+    else localStorage.removeItem(WORKSHOP_KEY);
+  } catch { /* quota */ }
 }
 
 export function clearWorkshopDraft() {

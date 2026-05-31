@@ -115,14 +115,16 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 
 ## Regression Checklist (verify after each AI surface change)
 
-- [ ] Manual mode works with no API key
-- [ ] LLM failure preserves draft + shows next action
-- [ ] Discard invalidates in-flight LLM
-- [ ] Hide preserves session; Discard clears
-- [ ] User edits during LLM not overwritten
-- [ ] Source snapshot frozen at workshop open
-- [ ] Workshop draft saved before LLM call
-- [ ] Restore prompt on cold start
+- [x] Manual mode works with no API key — local analysis + coach; LLM only on Generate
+- [x] LLM failure preserves draft + shows next action — workshop AI lane only; fix keeps `userText`
+- [x] Discard invalidates in-flight LLM — `activeRequestId` bump in `closeCompare`
+- [x] Hide preserves session; Discard clears — `hideCompare` vs `closeCompare` + flush/clear storage
+- [x] User edits during LLM not overwritten — draft lane untouched during Generate
+- [x] Source snapshot frozen at workshop open — `compareSourceText` set at open; chips use snapshot
+- [x] Workshop draft saved before LLM call — `flushPersistWorkshop()` before Generate
+- [x] Restore prompt on cold start — `showRestorePrompt` on mount
+
+Run static verification: `node scripts/ux-regression-check.mjs`
 
 ---
 
@@ -144,6 +146,7 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 | Date | Slice | Notes |
 | --- | --- | --- |
 | 2026-05-30 | 1–5 + cross-slice | Full UX.md implementation on `implement_ux`: new modules, panel/compare/fix rewrite, CSS, task list. Manual regression checklist pending. |
+| 2026-05-30 | Regression | Flush-before-LLM, fix overlay manual-edit preservation, hidden workshop resume, `scripts/ux-regression-check.mjs`. |
 
 ---
 

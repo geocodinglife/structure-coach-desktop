@@ -3,7 +3,7 @@
 import { analyzeText } from '../../analysis/analyzer.js';
 import { callLLM } from '../../llm/client.js';
 import { CHIP_DEFS, getChipDef, chipAriaLabel } from '../chip-defs.js';
-import { saveWorkshopDraft, clearWorkshopDraft } from '../persistence.js';
+import { saveWorkshopDraft, flushWorkshopDraft } from '../persistence.js';
 
 let rewriteDirty = false;
 let suppressRewriteInput = false;
@@ -19,6 +19,10 @@ function errMsg(e) {
 }
 
 export function openWorkshop() {
+  if (compareHasSession) {
+    openStoredCompare();
+    return;
+  }
   const input = document.getElementById('sc-input');
   if (!input || !input.value.trim()) return;
   const sourceText = input.value;
@@ -36,7 +40,7 @@ export async function generateWorkshopSuggestion() {
   const aiEl = document.getElementById('sc-compare-ai');
   if (!aiEl) return;
 
-  persistWorkshop();
+  flushPersistWorkshop();
 
   const requestId = ++activeRequestId;
   if (btn) {
@@ -73,7 +77,7 @@ export async function generateWorkshopSuggestion() {
       btn.disabled = false;
       btn.textContent = 'Generate';
     }
-    persistWorkshop();
+    flushPersistWorkshop();
   }
 }
 
@@ -197,15 +201,24 @@ function updateCompareContent(originalText, rewriteText, {
   persistWorkshop();
 }
 
-function persistWorkshop() {
-  if (!compareHasSession) return;
+function workshopPayload() {
   const draft = document.getElementById('sc-compare-rewrite');
   const aiEl = document.getElementById('sc-compare-ai');
-  saveWorkshopDraft({
+  return {
     sourceText: compareSourceText,
     myDraft: draft?.value || '',
     aiSuggestion: aiEl?.value || aiSuggestionText || '',
-  });
+  };
+}
+
+function persistWorkshop() {
+  if (!compareHasSession) return;
+  saveWorkshopDraft(workshopPayload());
+}
+
+function flushPersistWorkshop() {
+  if (!compareHasSession) return;
+  flushWorkshopDraft(workshopPayload());
 }
 
 export function markRewriteDirty() {
@@ -217,7 +230,7 @@ export function markRewriteDirty() {
 export function hideCompare() {
   const overlay = document.getElementById('sc-compare-overlay');
   if (!overlay) return;
-  persistWorkshop();
+  flushPersistWorkshop();
   overlay.classList.remove('open');
   overlay.setAttribute('aria-hidden', 'true');
   updateResumeButton();
@@ -257,7 +270,7 @@ export function closeCompare() {
   compareSourceText = '';
   aiSuggestionText = '';
   activeRequestId += 1;
-  clearWorkshopDraft();
+  flushWorkshopDraft(null);
   updateResumeButton();
 }
 

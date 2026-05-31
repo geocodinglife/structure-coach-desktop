@@ -9,9 +9,37 @@ const RULE_TITLES = Object.fromEntries(
 
 let session = null;
 
+function rowCache(cls, key) {
+  if (!session) return null;
+  let clsCache = session.cache.get(cls);
+  if (!clsCache) {
+    clsCache = new Map();
+    session.cache.set(cls, clsCache);
+  }
+  let cached = clsCache.get(key);
+  if (!cached) {
+    cached = { state: 'idle', userText: '', aiText: '', errorMsg: '' };
+    clsCache.set(key, cached);
+  }
+  return cached;
+}
+
+function snapshotRowEdits(cls) {
+  if (!session) return;
+  document.querySelectorAll(`.sc-fix-row[data-cls="${cls}"]`).forEach(row => {
+    const key = row.dataset.key;
+    const ta = row.querySelector('.sc-fix-rewrite-input');
+    const cached = rowCache(cls, key);
+    if (!cached || !ta || cached.state === 'pending') return;
+    cached.userText = ta.value;
+  });
+}
+
 export function openFixOverlay(cls, sentences, fullText) {
   const overlay = document.getElementById('sc-fix-overlay');
   if (!overlay) return;
+
+  if (session?.activeCls) snapshotRowEdits(session.activeCls);
 
   if (!session) {
     session = { sentences: sentences || [], fullText: fullText || '', cache: new Map() };
@@ -29,6 +57,7 @@ export function openFixOverlay(cls, sentences, fullText) {
 }
 
 export function closeFixOverlay() {
+  if (session?.activeCls) snapshotRowEdits(session.activeCls);
   const overlay = document.getElementById('sc-fix-overlay');
   if (overlay) {
     overlay.classList.remove('open');
@@ -64,6 +93,11 @@ function renderChipStrip(activeCls) {
   });
 }
 
+function rewriteValue(cached) {
+  if (cached.state === 'done') return cached.aiText || cached.userText;
+  return cached.userText;
+}
+
 function renderRowsForCls(cls) {
   const titleEl = document.getElementById('sc-fix-title');
   const listEl = document.getElementById('sc-fix-list');
@@ -90,19 +124,9 @@ function renderRowsForCls(cls) {
     return;
   }
 
-  let clsCache = session.cache.get(cls);
-  if (!clsCache) {
-    clsCache = new Map();
-    session.cache.set(cls, clsCache);
-  }
-
   matches.forEach(sent => {
     const key = sent.text;
-    let cached = clsCache.get(key);
-    if (!cached) {
-      cached = { state: 'idle', result: '' };
-      clsCache.set(key, cached);
-    }
+    const cached = rowCache(cls, key);
 
     const row = document.createElement('div');
     row.className = 'sc-fix-row';
@@ -121,9 +145,15 @@ function renderRowsForCls(cls) {
     ta.className = 'sc-fix-rewrite-input';
     ta.rows = 3;
     ta.spellcheck = true;
-    ta.value = cached.state === 'done' ? cached.result : '';
+    ta.value = rewriteValue(cached);
     ta.placeholder = cached.state === 'pending' ? 'Generating…' : 'Edit manually or click Generate';
     ta.disabled = cached.state === 'pending';
+    ta.addEventListener('input', () => {
+      if (cached.state !== 'pending') {
+        cached.userText = ta.value;
+        cached.state = 'idle';
+      }
+    });
     rewriteWrap.appendChild(ta);
 
     const genBtn = document.createElement('button');
@@ -134,14 +164,16 @@ function renderRowsForCls(cls) {
     genBtn.addEventListener('click', () => generateRow(cls, key));
     rewriteWrap.appendChild(genBtn);
 
-    if (cached.state === 'error') {
+    if (cached.state === 'error' && cached.errorMsg) {
       const err = document.createElement('div');
       err.className = 'sc-fix-error-msg';
-      err.textContent = cached.result;
+      err.textContent = cached.errorMsg;
       rewriteWrap.appendChild(err);
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'sc-fix-retry';
+      retry.dataset.cls = cls;
+      retry.dataset.key = key;
       retry.textContent = 'Retry';
       retry.addEventListener('click', () => generateRow(cls, key));
       rewriteWrap.appendChild(retry);
@@ -154,14 +186,13 @@ function renderRowsForCls(cls) {
 
 function generateRow(cls, key) {
   if (!session) return;
-  const clsCache = session.cache.get(cls);
-  if (!clsCache) return;
-  const cached = clsCache.get(key);
+  snapshotRowEdits(cls);
+  const cached = rowCache(cls, key);
   const sent = session.sentences.find(s => s.text === key);
   if (!cached || !sent) return;
 
   cached.state = 'pending';
-  cached.result = '';
+  cached.errorMsg = '';
   renderRowsForCls(cls);
 
   const sessionRef = session;
@@ -169,13 +200,14 @@ function generateRow(cls, key) {
     .then(result => {
       if (session !== sessionRef) return;
       cached.state = 'done';
-      cached.result = result;
+      cached.aiText = result;
+      cached.errorMsg = '';
       renderRowsForCls(cls);
     })
     .catch(err => {
       if (session !== sessionRef) return;
       cached.state = 'error';
-      cached.result = 'Error: ' + errMsg(err);
+      cached.errorMsg = 'Error: ' + errMsg(err);
       renderRowsForCls(cls);
     });
 }
