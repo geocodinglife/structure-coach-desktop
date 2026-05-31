@@ -1,6 +1,16 @@
-// AI-rewrite comparison overlay (original vs AI side-by-side).
+// Rewrite Workshop — manual draft + optional AI suggestion lanes.
 
+import { analyzeText } from '../../analysis/analyzer.js';
 import { callLLM } from '../../llm/client.js';
+import { CHIP_DEFS, getChipDef, chipAriaLabel } from '../chip-defs.js';
+import { saveWorkshopDraft, flushWorkshopDraft } from '../persistence.js';
+
+let rewriteDirty = false;
+let suppressRewriteInput = false;
+let activeRequestId = 0;
+let compareHasSession = false;
+let compareSourceText = '';
+let aiSuggestionText = '';
 
 function errMsg(e) {
   if (typeof e === 'string') return e;
@@ -8,50 +18,345 @@ function errMsg(e) {
   return String(e);
 }
 
-export async function rewriteFullText() {
+export function openWorkshop() {
+  if (compareHasSession) {
+    openStoredCompare();
+    return;
+  }
   const input = document.getElementById('sc-input');
-  const btn = document.getElementById('sc-ai-rewrite');
-  if (!input || !btn) return;
-  const text = input.value.trim();
-  if (!text) return;
+  if (!input || !input.value.trim()) return;
+  const sourceText = input.value;
+  showCompare(sourceText, sourceText, {
+    rewriteReady: true,
+    statusText: 'Edit your draft, or click Generate for an AI suggestion.',
+    openAiEmpty: true,
+  });
+}
 
-  btn.dataset.busy = '1';
-  btn.disabled = true;
-  const originalLabel = btn.textContent;
-  btn.textContent = 'Rewriting…';
+export async function generateWorkshopSuggestion() {
+  if (!compareSourceText) return;
+  const btn = document.getElementById('sc-compare-generate');
+  const statusEl = document.getElementById('sc-compare-status');
+  const aiEl = document.getElementById('sc-compare-ai');
+  if (!aiEl) return;
 
-  openCompare(input.value, 'Generating rewrite…', { rewriteReady: false });
+  flushPersistWorkshop();
+
+  const requestId = ++activeRequestId;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+  }
+  if (statusEl) {
+    statusEl.textContent = 'AI is drafting a suggestion. Your draft will not be overwritten.';
+    statusEl.hidden = false;
+  }
 
   try {
-    const result = await callLLM({ type: 'rewrite-full', text: input.value, context: '' });
-    openCompare(input.value, result, { rewriteReady: true });
+    const result = await callLLM({ type: 'rewrite-full', text: compareSourceText, context: '' });
+    if (requestId !== activeRequestId) return;
+    aiSuggestionText = result;
+    aiEl.value = result;
+    if (statusEl) {
+      statusEl.textContent = 'Suggestion ready. Review before inserting into your draft.';
+      statusEl.hidden = false;
+    }
   } catch (err) {
-    openCompare(input.value, 'Error: ' + errMsg(err), { rewriteReady: false });
+    if (requestId !== activeRequestId) return;
+    if (statusEl) {
+      statusEl.innerHTML = 'AI unavailable: ' + esc(errMsg(err)) +
+        ' <button type="button" class="sc-link-btn" id="sc-status-settings">Open Settings</button> ' +
+        'Keep editing your draft manually.';
+      statusEl.hidden = false;
+      statusEl.querySelector('#sc-status-settings')?.addEventListener('click', () => {
+        import('../settings-modal.js').then(m => m.openSettingsModal());
+      });
+    }
   } finally {
-    btn.textContent = originalLabel;
-    delete btn.dataset.busy;
-    btn.disabled = !input.value.trim();
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Generate';
+    }
+    flushPersistWorkshop();
   }
 }
 
-export function openCompare(originalText, rewriteText, { rewriteReady } = { rewriteReady: false }) {
+export function insertIntoDraft(mode) {
+  const draft = document.getElementById('sc-compare-rewrite');
+  const aiEl = document.getElementById('sc-compare-ai');
+  if (!draft || !aiEl) return;
+  const suggestion = aiEl.value.trim();
+  if (!suggestion) return;
+
+  if (mode === 'append') {
+    const sep = draft.value.trim() ? '\n\n' : '';
+    draft.value += sep + suggestion;
+  } else if (mode === 'selection') {
+    const start = draft.selectionStart;
+    const end = draft.selectionEnd;
+    if (start === end) return;
+    draft.value = draft.value.slice(0, start) + suggestion + draft.value.slice(end);
+  } else {
+    if (draft.value.trim() && !confirm('Replace all of your draft with the AI suggestion?')) return;
+    draft.value = suggestion;
+  }
+  draft.focus();
+  markRewriteDirty();
+  persistWorkshop();
+}
+
+export function insertWorkshopScaffold(kind) {
+  const draft = document.getElementById('sc-compare-rewrite');
+  if (!draft) return;
+  const scaffolds = {
+    up: 'This matters because ___',
+    down: 'Do this: ___ in ___',
+    wide: 'Check whether ___ also applies to ___',
+  };
+  const s = scaffolds[kind];
+  if (!s) return;
+  const sep = draft.value.trim() && !draft.value.endsWith('\n') ? '\n' : '';
+  draft.value += sep + s;
+  const idx = draft.value.indexOf('___');
+  if (idx !== -1) draft.setSelectionRange(idx, idx + 3);
+  draft.focus();
+  markRewriteDirty();
+  persistWorkshop();
+}
+
+/** @deprecated use openWorkshop — kept for toolbar id compatibility */
+export async function rewriteFullText() {
+  openWorkshop();
+}
+
+export function showCompare(originalText, rewriteText, options = {}) {
+  updateCompareContent(originalText, rewriteText, options);
+  openStoredCompare();
+}
+
+export function restoreWorkshopSession(data) {
+  if (!data?.sourceText) return;
+  compareSourceText = data.sourceText;
+  compareHasSession = true;
+  updateCompareContent(data.sourceText, data.myDraft || data.sourceText, {
+    rewriteReady: true,
+    statusText: 'Restored rewrite workshop.',
+    preserveDirty: true,
+  });
+  const aiEl = document.getElementById('sc-compare-ai');
+  if (aiEl && data.aiSuggestion) {
+    aiSuggestionText = data.aiSuggestion;
+    aiEl.value = data.aiSuggestion;
+  }
+  updateWorkshopChrome();
+}
+
+export function openStoredCompare() {
+  if (!compareHasSession) return;
   const overlay = document.getElementById('sc-compare-overlay');
-  const originalEl = document.getElementById('sc-compare-original');
-  const rewriteEl = document.getElementById('sc-compare-rewrite');
-  const copyBtn = document.getElementById('sc-compare-copy');
-  if (!overlay || !originalEl || !rewriteEl || !copyBtn) return;
-  originalEl.textContent = originalText;
-  rewriteEl.textContent = rewriteText;
-  rewriteEl.classList.toggle('sc-compare-pending', !rewriteReady);
-  copyBtn.disabled = !rewriteReady;
+  if (!overlay) return;
   overlay.classList.add('open');
   overlay.setAttribute('aria-hidden', 'false');
+  updateResumeButton();
+}
+
+function updateCompareContent(originalText, rewriteText, {
+  rewriteReady = false,
+  statusText = '',
+  preserveDirty = false,
+  openAiEmpty = false,
+} = {}) {
+  const originalEl = document.getElementById('sc-compare-original');
+  const issuesEl = document.getElementById('sc-compare-issues');
+  const rewriteEl = document.getElementById('sc-compare-rewrite');
+  const aiEl = document.getElementById('sc-compare-ai');
+  const copyBtn = document.getElementById('sc-compare-copy');
+  const statusEl = document.getElementById('sc-compare-status');
+  if (!originalEl || !rewriteEl || !copyBtn) return;
+
+  const analysis = analyzeText(originalText);
+  originalEl.innerHTML = analysis.html;
+  renderIssueSummary(issuesEl, analysis.stats);
+
+  if (!preserveDirty || !rewriteDirty) {
+    setRewriteValue(rewriteEl, rewriteText);
+    rewriteDirty = false;
+  }
+  rewriteEl.classList.toggle('sc-compare-pending', !rewriteReady);
+  copyBtn.disabled = false;
+
+  if (aiEl && openAiEmpty) {
+    aiSuggestionText = '';
+    aiEl.value = '';
+  }
+
+  compareSourceText = originalText;
+  if (statusEl) {
+    statusEl.textContent = statusText;
+    statusEl.hidden = !statusText;
+    statusEl.setAttribute('role', 'status');
+    statusEl.setAttribute('aria-live', 'polite');
+  }
+  compareHasSession = true;
+  updateResumeButton();
+  updateWorkshopChrome();
+  persistWorkshop();
+}
+
+function workshopPayload() {
+  const draft = document.getElementById('sc-compare-rewrite');
+  const aiEl = document.getElementById('sc-compare-ai');
+  return {
+    sourceText: compareSourceText,
+    myDraft: draft?.value || '',
+    aiSuggestion: aiEl?.value || aiSuggestionText || '',
+  };
+}
+
+function persistWorkshop() {
+  if (!compareHasSession) return;
+  saveWorkshopDraft(workshopPayload());
+}
+
+function flushPersistWorkshop() {
+  if (!compareHasSession) return;
+  flushWorkshopDraft(workshopPayload());
+}
+
+export function markRewriteDirty() {
+  if (suppressRewriteInput) return;
+  rewriteDirty = true;
+  persistWorkshop();
+}
+
+export function hasWorkshopSession() {
+  return compareHasSession;
+}
+
+export function hideCompare() {
+  const overlay = document.getElementById('sc-compare-overlay');
+  if (!overlay) return;
+  flushPersistWorkshop();
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  updateResumeButton();
+  updateWorkshopChrome();
+  showWorkshopToast('Workshop hidden — use Resume rewrite to continue.');
+}
+
+function showWorkshopToast(msg) {
+  const toast = document.getElementById('sc-workshop-toast');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.hidden = false;
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => { toast.hidden = true; }, 2200);
+}
+
+export function updateWorkshopChrome() {
+  const indicator = document.getElementById('sc-workshop-indicator');
+  if (indicator) indicator.hidden = !compareHasSession;
+  const rewriteBtn = document.getElementById('sc-ai-rewrite');
+  if (rewriteBtn && compareHasSession) {
+    rewriteBtn.title = 'Resume rewrite workshop';
+  } else if (rewriteBtn) {
+    rewriteBtn.title = '';
+  }
+}
+
+function setRewriteValue(el, value) {
+  suppressRewriteInput = true;
+  try {
+    if ('value' in el) el.value = value;
+    else el.textContent = value;
+  } finally {
+    suppressRewriteInput = false;
+  }
 }
 
 export function closeCompare() {
   const overlay = document.getElementById('sc-compare-overlay');
+  const originalEl = document.getElementById('sc-compare-original');
+  const issuesEl = document.getElementById('sc-compare-issues');
+  const rewriteEl = document.getElementById('sc-compare-rewrite');
+  const aiEl = document.getElementById('sc-compare-ai');
+  const statusEl = document.getElementById('sc-compare-status');
   if (overlay) {
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
   }
+  if (originalEl) originalEl.textContent = '';
+  if (issuesEl) issuesEl.innerHTML = '';
+  if (rewriteEl) setRewriteValue(rewriteEl, '');
+  if (aiEl) aiEl.value = '';
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.hidden = true;
+  }
+  rewriteDirty = false;
+  compareHasSession = false;
+  compareSourceText = '';
+  aiSuggestionText = '';
+  activeRequestId += 1;
+  flushWorkshopDraft(null);
+  updateResumeButton();
+  updateWorkshopChrome();
+}
+
+export function getCompareSourceText() {
+  return compareSourceText;
+}
+
+export function openWorkshopApply() {
+  const draft = document.getElementById('sc-compare-rewrite');
+  const input = document.getElementById('sc-input');
+  if (!draft || !input || !draft.value.trim()) return;
+  import('../apply-editor.js').then(m => m.openApplyDiff({
+    title: 'Apply workshop draft to editor',
+    before: input.value,
+    after: draft.value,
+  }));
+}
+
+export function refreshCompareResumeButton() {
+  updateResumeButton();
+}
+
+function renderIssueSummary(el, stats) {
+  if (!el) return;
+  const parts = [];
+  const countByCls = (cls) => stats.find(s => s.cls === cls)?.count || 0;
+
+  CHIP_DEFS.forEach(def => {
+    let count = countByCls(def.cls);
+    if (def.cls === 'sc-hl-pass') {
+      count = stats.filter(s => s.cls === 'sc-hl-pass').reduce((n, s) => n + s.count, 0);
+    }
+    if (count > 0) {
+      parts.push(
+        `<button type="button" class="sc-stat sc-stat--${def.variant}" data-cls="${def.cls}" ` +
+        `aria-label="${chipAriaLabel(def.label, count)}">${def.label}: ${count}</button>`,
+      );
+    }
+  });
+  el.innerHTML = parts.join(' ');
+}
+
+function updateResumeButton() {
+  const resumeBtn = document.getElementById('sc-compare-resume');
+  const overlay = document.getElementById('sc-compare-overlay');
+  const fix = document.getElementById('sc-fix-overlay');
+  const reader = document.getElementById('sc-reader-overlay');
+  const settings = document.getElementById('sc-settings-modal');
+  if (!resumeBtn) return;
+  const isOpen = overlay?.classList.contains('open');
+  const blockingOverlayOpen =
+    fix?.classList.contains('open') ||
+    reader?.classList.contains('open') ||
+    settings?.classList.contains('open');
+  resumeBtn.hidden = !compareHasSession || isOpen || blockingOverlayOpen;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

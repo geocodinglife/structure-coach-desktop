@@ -1,11 +1,61 @@
-/* Color tokens, typography, base resets. Will hold the variables that panel.css and overlays.css consume. */
+/* Structure Coach — design tokens */
 
 :root {
-  --sc-fg: #2a2a2a;
-  --sc-bg: #fff;
-  --sc-accent: #5c6bc0;
-  --sc-accent-soft: #ede7e0;
-  --sc-muted: #999;
+  /* Ink & surfaces */
+  --sc-ink: #1c1917;
+  --sc-ink-secondary: #44403c;
+  --sc-ink-muted: #78716c;
+  --sc-ink-faint: #a8a29e;
+
+  --sc-bg-app: #eae6df;
+  --sc-bg-panel: #faf9f7;
+  --sc-bg-write: #ffffff;
+  --sc-bg-map: #f5f3ef;
+  --sc-bg-inset: #f0ece6;
+
+  --sc-border: #e7e0d8;
+  --sc-border-strong: #d6cec4;
+
+  /* Brand */
+  --sc-accent: #4f5bd5;
+  --sc-accent-hover: #636edf;
+  --sc-accent-soft: rgba(79, 91, 213, 0.1);
+  --sc-accent-muted: rgba(79, 91, 213, 0.06);
+
+  --sc-ai-from: #6d4c9a;
+  --sc-ai-to: #4f5bd5;
+
+  /* Semantic */
+  --sc-success: #15803d;
+  --sc-success-bg: rgba(21, 128, 61, 0.08);
+  --sc-warn: #b45309;
+  --sc-warn-bg: #fffbeb;
+  --sc-danger: #be123c;
+
+  /* Layout */
+  --sc-radius-sm: 6px;
+  --sc-radius-md: 10px;
+  --sc-radius-lg: 14px;
+  --sc-radius-pill: 999px;
+
+  --sc-shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.06);
+  --sc-shadow-md: 0 4px 12px rgba(28, 25, 23, 0.06), 0 2px 4px rgba(28, 25, 23, 0.04);
+  --sc-shadow-lg: 0 12px 32px rgba(28, 25, 23, 0.1);
+  --sc-shadow-focus: 0 0 0 3px rgba(79, 91, 213, 0.25);
+
+  /* Typography */
+  --sc-font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --sc-font-editor: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+  --sc-text-xs: 11px;
+  --sc-text-sm: 13px;
+  --sc-text-base: 15px;
+
+  /* Legacy aliases */
+  --sc-fg: var(--sc-ink);
+  --sc-bg: var(--sc-bg-write);
+  --sc-accent-soft-legacy: var(--sc-bg-inset);
+  --sc-muted: var(--sc-ink-muted);
 }
 
 * { box-sizing: border-box; }
@@ -14,7 +64,10 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  color: var(--sc-fg);
-  background: var(--sc-bg);
+  font-family: var(--sc-font-ui);
+  font-size: var(--sc-text-sm);
+  color: var(--sc-ink);
+  background: var(--sc-bg-app);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

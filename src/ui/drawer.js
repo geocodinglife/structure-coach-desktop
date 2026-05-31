@@ -62,9 +62,11 @@ export function openDrawerForSentence(sentence) {
   const aiBtn = drawer.querySelector('#sc-ai-refactor-btn');
   const aiResult = drawer.querySelector('#sc-ai-result');
 
-  if (aiTarget) aiTarget.textContent = `Target: "${sentence.text.substring(0, 50)}..."`;
+  if (aiTarget) aiTarget.textContent = sentence.text.trim();
   if (aiBtn) aiBtn.disabled = false;
   if (aiResult) aiResult.hidden = true;
+
+  import('./coach.js').then(m => m.setCoachTab('fix'));
 
   const focusIds = sentence.stats
     .filter(s => s.count > 0)
@@ -87,14 +89,22 @@ export async function refactorSelectedSentence() {
       text: currentSelectedSentence.text,
       context: input.value,
     });
-    resultDiv.textContent = result;
     resultDiv.hidden = false;
+    if (resultDiv.tagName === 'TEXTAREA') {
+      resultDiv.value = result;
+    } else {
+      resultDiv.textContent = result;
+    }
     btn.textContent = 'Refactor with AI';
     btn.disabled = false;
   } catch (err) {
     const msg = typeof err === 'string' ? err : (err?.message || String(err));
-    resultDiv.textContent = 'Error: ' + msg;
     resultDiv.hidden = false;
+    if (resultDiv.tagName === 'TEXTAREA') {
+      resultDiv.value = 'Error: ' + msg;
+    } else {
+      resultDiv.textContent = 'Error: ' + msg;
+    }
     btn.textContent = 'Retry Refactor';
     btn.disabled = false;
   }

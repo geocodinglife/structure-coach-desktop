@@ -3,6 +3,8 @@
 // via the `set_api_key` Tauri command.
 
 import { getConfig, setConfig, getApiKey, setApiKey } from '../llm/settings.js';
+import { testLLMConnection } from '../llm/client.js';
+import { refreshCompareResumeButton } from './overlays/compare.js';
 
 const PRESETS = {
   gemini: {
@@ -43,8 +45,10 @@ export async function openSettingsModal() {
   modal.querySelector('#sc-settings-key').value = await getApiKey();
   modal.querySelector('#sc-settings-status').hidden = true;
   syncProviderUI(modal);
+  updateConnectionStatus(modal);
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
+  refreshCompareResumeButton();
   setTimeout(() => modal.querySelector('#sc-settings-key').focus(), 50);
 }
 
@@ -53,6 +57,7 @@ export function closeSettingsModal() {
   if (modal) {
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
+    refreshCompareResumeButton();
   }
 }
 
@@ -76,7 +81,31 @@ export function wireSettingsModal() {
     if (opener) opener(url);
   });
 
-  providerSel.addEventListener('change', () => syncProviderUI(modal));
+  providerSel.addEventListener('change', () => {
+    syncProviderUI(modal);
+    updateConnectionStatus(modal);
+  });
+
+  modal.querySelector('#sc-settings-test')?.addEventListener('click', async () => {
+    const testBtn = modal.querySelector('#sc-settings-test');
+    const status = modal.querySelector('#sc-settings-status');
+    if (testBtn) {
+      testBtn.disabled = true;
+      testBtn.textContent = 'Testing…';
+    }
+    try {
+      const provider = await testLLMConnection();
+      showStatus(status, `${providerLabel(provider)} · connected`, 'success');
+    } catch (err) {
+      const msg = typeof err === 'string' ? err : (err?.message || String(err));
+      showStatus(status, msg.includes('key') ? 'Manual mode · no API key' : 'Connection failed: ' + msg, 'error');
+    } finally {
+      if (testBtn) {
+        testBtn.disabled = false;
+        testBtn.textContent = 'Test connection';
+      }
+    }
+  });
 
   toggle.addEventListener('click', () => {
     const showing = keyInput.type === 'text';
@@ -170,4 +199,28 @@ function showStatus(el, message, kind) {
   el.textContent = message;
   el.className = 'sc-settings-status sc-settings-status--' + kind;
   el.hidden = false;
+}
+
+async function updateConnectionStatus(modal) {
+  const line = modal.querySelector('#sc-settings-connection-line');
+  if (!line) return;
+  const { provider } = getConfig();
+  const key = await getApiKey();
+  const needsKey = provider !== 'ollama';
+  if (needsKey && !key) {
+    line.textContent = 'Manual mode · highlights work without AI';
+    return;
+  }
+  line.textContent = `${providerLabel(provider)} · ready (use Test connection to verify)`;
+}
+
+function providerLabel(id) {
+  const labels = {
+    gemini: 'Gemini',
+    anthropic: 'Claude',
+    groq: 'Groq',
+    'openai-compat': 'OpenAI-compatible',
+    ollama: 'Ollama',
+  };
+  return labels[id] || id;
 }
