@@ -51,6 +51,19 @@ export function closeCoach() {
   if (chip && chip.focus) chip.focus();
 }
 
+export function renderLearnPrimer() {
+  const el = document.getElementById('sc-coach-learn');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="sc-coach-primer">
+      <h3 class="sc-coach-learn-title">Thinking moves</h3>
+      <p>Communication moves <strong>Up</strong> (why), <strong>Down</strong> (action and detail), or <strong>Wide</strong> (patterns).</p>
+      <p>Click an issue chip to learn what was detected, when to keep it, and one rewrite move to try.</p>
+      <p class="sc-coach-primer-hint">Start with <strong>Frames</strong> if prepositions may be hiding the action.</p>
+    </div>
+  `;
+}
+
 export function setCoachTab(tab) {
   document.querySelectorAll('.sc-coach-tab').forEach(btn => {
     const on = btn.dataset.tab === tab;
@@ -60,6 +73,7 @@ export function setCoachTab(tab) {
   document.querySelectorAll('.sc-coach-panel').forEach(panel => {
     panel.hidden = panel.dataset.panel !== tab;
   });
+  if (tab === 'learn' && !activeCls) renderLearnPrimer();
 }
 
 function renderLearnContent(def, cls) {
@@ -118,6 +132,13 @@ function esc(s) {
 
 export function wireCoachTabs() {
   document.querySelectorAll('.sc-coach-tab').forEach(btn => {
-    btn.addEventListener('click', () => setCoachTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      const drawer = document.getElementById('sc-drawer');
+      if (!drawer?.classList.contains('open') && btn.dataset.tab === 'learn') {
+        drawer?.classList.add('open');
+        drawer?.setAttribute('aria-hidden', 'false');
+      }
+      setCoachTab(btn.dataset.tab);
+    });
   });
 }

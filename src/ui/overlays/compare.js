@@ -148,6 +148,7 @@ export function restoreWorkshopSession(data) {
     aiSuggestionText = data.aiSuggestion;
     aiEl.value = data.aiSuggestion;
   }
+  updateWorkshopChrome();
 }
 
 export function openStoredCompare() {
@@ -198,6 +199,7 @@ function updateCompareContent(originalText, rewriteText, {
   }
   compareHasSession = true;
   updateResumeButton();
+  updateWorkshopChrome();
   persistWorkshop();
 }
 
@@ -227,6 +229,10 @@ export function markRewriteDirty() {
   persistWorkshop();
 }
 
+export function hasWorkshopSession() {
+  return compareHasSession;
+}
+
 export function hideCompare() {
   const overlay = document.getElementById('sc-compare-overlay');
   if (!overlay) return;
@@ -234,6 +240,28 @@ export function hideCompare() {
   overlay.classList.remove('open');
   overlay.setAttribute('aria-hidden', 'true');
   updateResumeButton();
+  updateWorkshopChrome();
+  showWorkshopToast('Workshop hidden — use Resume rewrite to continue.');
+}
+
+function showWorkshopToast(msg) {
+  const toast = document.getElementById('sc-workshop-toast');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.hidden = false;
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => { toast.hidden = true; }, 2200);
+}
+
+export function updateWorkshopChrome() {
+  const indicator = document.getElementById('sc-workshop-indicator');
+  if (indicator) indicator.hidden = !compareHasSession;
+  const rewriteBtn = document.getElementById('sc-ai-rewrite');
+  if (rewriteBtn && compareHasSession) {
+    rewriteBtn.title = 'Resume rewrite workshop';
+  } else if (rewriteBtn) {
+    rewriteBtn.title = '';
+  }
 }
 
 function setRewriteValue(el, value) {
@@ -272,6 +300,7 @@ export function closeCompare() {
   activeRequestId += 1;
   flushWorkshopDraft(null);
   updateResumeButton();
+  updateWorkshopChrome();
 }
 
 export function getCompareSourceText() {

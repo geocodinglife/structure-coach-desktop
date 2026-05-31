@@ -19,6 +19,7 @@ import {
   insertWorkshopScaffold,
   restoreWorkshopSession,
   openWorkshopApply,
+  updateWorkshopChrome,
 } from './overlays/compare.js';
 import { openFixOverlay, closeFixOverlay, retryFixRow } from './overlays/fix.js';
 import { openSettingsModal, closeSettingsModal, wireSettingsModal } from './settings-modal.js';
@@ -27,7 +28,7 @@ import { getParamedicMethodHTML } from '../guides/paramedic.js';
 import { getAdvancedStructureHTML } from '../guides/advanced-structure.js';
 import { getBDDGuidanceHTML } from '../guides/bdd.js';
 import { CHIP_DEFS, chipAriaLabel } from './chip-defs.js';
-import { openCoachLearn, closeCoach, wireCoachTabs } from './coach.js';
+import { openCoachLearn, closeCoach, wireCoachTabs, isChipKept } from './coach.js';
 import { computePositiveChecks, renderPositiveRow } from './positive.js';
 import { wireMovementBar, updateMovementBarVisibility } from './movement.js';
 import { saveMainDraft, showRestorePrompt } from './persistence.js';
@@ -67,8 +68,13 @@ export function mountPanel(root) {
         updateUI(input, layer);
       }
     },
-    (workshop) => restoreWorkshopSession(workshop),
+    (workshop) => {
+      restoreWorkshopSession(workshop);
+      updateWorkshopChrome();
+    },
   );
+
+  updateWorkshopChrome();
 
   setTimeout(() => document.getElementById('sc-input')?.focus(), 50);
 }
@@ -122,6 +128,10 @@ function wireEvents(root) {
     window.__TAURI__?.webviewWindow?.getCurrent()?.hide();
   });
   document.getElementById('sc-setup-open').addEventListener('click', openSettingsModal);
+  document.getElementById('sc-setup-continue')?.addEventListener('click', () => {
+    const b = document.getElementById('sc-setup-banner');
+    if (b) { b.dataset.dismissed = '1'; b.style.display = 'none'; }
+  });
   document.getElementById('sc-setup-dismiss').addEventListener('click', () => {
     const b = document.getElementById('sc-setup-banner');
     if (b) { b.dataset.dismissed = '1'; b.style.display = 'none'; }
@@ -266,6 +276,14 @@ function updateUI(input, layer) {
     renderStructureSignals(document.getElementById('sc-structure-signals-map'), sentences);
 
     const wordCount = text.match(/\S+/g)?.length || 0;
+    const sentCount = sentences.length;
+    const statsEl = document.getElementById('sc-doc-stats');
+    if (statsEl) {
+      statsEl.textContent = sentCount
+        ? `${wordCount} word${wordCount === 1 ? '' : 's'} · ${sentCount} sentence${sentCount === 1 ? '' : 's'}`
+        : '';
+    }
+
     if (wordCount === 0) {
       report.innerHTML = '';
       return;
@@ -282,8 +300,15 @@ function updateUI(input, layer) {
     CHIP_DEFS.forEach(def => {
       const count = countByCls(def.cls);
       if (count > 0) {
+        const sentenceHits = sentences.filter(s =>
+          s.stats.some(st => st.cls === def.cls && st.count > 0),
+        ).length;
+        let severity = '';
+        if (count >= 3) severity = ' sc-stat--heavy';
+        else if (sentenceHits >= 2) severity = ' sc-stat--repeat';
+        if (isChipKept(def.cls)) severity += ' sc-stat--kept';
         parts.push(
-          `<button type="button" class="sc-stat sc-stat--${def.variant}" data-cls="${def.cls}" ` +
+          `<button type="button" class="sc-stat sc-stat--${def.variant}${severity}" data-cls="${def.cls}" ` +
           `aria-label="${chipAriaLabel(def.label, count)}">${def.label}: ${count}</button>`,
         );
       }
@@ -303,7 +328,8 @@ function panelMarkup() {
       </div>
       <div id="sc-setup-banner" style="display: none">
         <span class="sc-setup-icon" aria-hidden="true">✨</span>
-        <span class="sc-setup-text">Local checks work without AI. Add a provider (Gemini is free) or Ollama for rewrite suggestions and Smart Fix.</span>
+        <span class="sc-setup-text">Local checks are active. Add AI when you want rewrite suggestions and Smart Fix.</span>
+        <button type="button" id="sc-setup-continue" class="sc-btn sc-btn-secondary">Continue without AI</button>
         <button type="button" id="sc-setup-open" class="sc-btn sc-btn-primary">Open Settings</button>
         <button type="button" id="sc-setup-dismiss" class="sc-setup-x" aria-label="Dismiss">&times;</button>
       </div>
@@ -345,16 +371,19 @@ function panelMarkup() {
             </div>
             <div id="sc-toolbar">
               <div id="sc-chips-wrap">
+                <div id="sc-doc-stats" class="sc-doc-stats"></div>
                 <div id="sc-error-count"></div>
                 <div id="sc-positive-row" hidden></div>
                 <div id="sc-structure-signals" hidden></div>
               </div>
               <div id="sc-actions">
+                <span id="sc-workshop-indicator" class="sc-workshop-indicator" hidden>Rewrite in progress</span>
                 <button id="sc-ai-rewrite" class="sc-btn sc-btn-primary sc-btn-ai" disabled>Rewrite…</button>
                 <button id="sc-copy" class="sc-btn sc-btn-primary" disabled>Copy</button>
                 <button id="sc-hide-btn" class="sc-btn sc-btn-secondary" title="Hide to Tray">Hide to tray</button>
                 <button id="sc-settings-btn" class="sc-btn sc-btn-secondary" title="Settings">Settings</button>
                 <div id="sc-copied-toast" hidden>Copied!</div>
+                <div id="sc-workshop-toast" class="sc-workshop-toast" hidden></div>
               </div>
             </div>
           </div>
@@ -392,7 +421,7 @@ function panelMarkup() {
                 <div class="sc-example-label sc-color-ai">Smart Fix</div>
                 <div id="sc-ai-target-text" class="sc-ai-target-text">Select a sentence in the classic tree to refactor.</div>
                 <button id="sc-ai-refactor-btn" class="sc-btn sc-btn-primary sc-ai-refactor-btn" disabled>Generate suggestion</button>
-                <div id="sc-ai-result" class="sc-ai-result" hidden></div>
+                <textarea id="sc-ai-result" class="sc-ai-result sc-ai-result-input" hidden rows="4" spellcheck="true" placeholder="AI suggestion appears here — edit or copy."></textarea>
               </div>
             </div>
             <div id="sc-coach-guides-panel" class="sc-coach-panel" data-panel="guides" hidden>
@@ -546,6 +575,7 @@ function panelMarkup() {
             </header>
             <form id="sc-settings-form">
               <p class="sc-settings-note sc-settings-note-top">Highlights and coaching work without a key. AI suggestions need a provider or Ollama.</p>
+              <p id="sc-settings-connection-line" class="sc-settings-connection-line">Manual mode · highlights work without AI</p>
               <label for="sc-settings-provider">LLM Provider</label>
               <select id="sc-settings-provider">
                 <option value="gemini">Google Gemini</option>
@@ -574,7 +604,10 @@ function panelMarkup() {
                 </div>
               </div>
               <div id="sc-settings-status" class="sc-settings-status" hidden></div>
-              <button type="submit" class="sc-btn sc-btn-primary">Save</button>
+              <div class="sc-settings-actions">
+                <button type="button" id="sc-settings-test" class="sc-btn sc-btn-secondary">Test connection</button>
+                <button type="submit" class="sc-btn sc-btn-primary">Save</button>
+              </div>
               <p class="sc-settings-note">Key is stored in the OS keyring. Other settings are stored locally.</p>
             </form>
           </div>

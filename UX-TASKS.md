@@ -165,6 +165,21 @@ Run verification: `npm run check:ux`
 | 2026-05-30 | 1–5 + cross-slice | Core UX.md implementation |
 | 2026-05-30 | Regression | Flush-before-LLM, fix manual-edit preservation |
 | 2026-05-30 | 6–9 | Structure map Phase 1, apply-to-editor, LLM scaffold, structure signals |
+| 2026-05-30 | 10 | Onboarding, settings test, workshop indicator, polish quick wins |
+
+---
+
+## Slice 10 — Polish (UX-TWO priorities G–I, quick wins)
+
+- [x] Setup banner: Continue without AI + updated copy
+- [x] Settings: Test connection + provider status line
+- [x] Workshop draft indicator in toolbar
+- [x] Hide workshop toast (Escape / Hide)
+- [x] Word + sentence count in toolbar
+- [x] Chip severity styling (heavy / repeat patterns)
+- [x] Learn tab framework primer when no chip selected
+- [x] Smart Fix result as editable textarea
+- [x] Full sentence shown in Fix tab target
 
 ---
 

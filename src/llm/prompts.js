@@ -58,3 +58,7 @@ ${context}
 
 Return ONLY the single sentence. No quotes, no preamble.`;
 }
+
+export function buildPingPrompt() {
+  return 'Reply with exactly the word OK and nothing else.';
+}
