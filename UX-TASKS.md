@@ -3,7 +3,9 @@
 Source spec: [UX.md](./UX.md)  
 Branch: `implement_ux`
 
-Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
+**Status: complete** — all slices and deferred items implemented.
+
+Run verification: `npm run check:ux`
 
 ---
 
@@ -18,8 +20,6 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 - [x] Update setup banner: AI optional, local checks work without key
 - [x] Centralize labels in `src/ui/chip-defs.js`
 
-**Files:** `panel.js`, `compare.js`, `fix.js`, `chip-defs.js`, `overlays.css`
-
 ---
 
 ## Slice 2 — Teach Before Fix
@@ -31,8 +31,6 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 - [x] Fix sentences opens Fix overlay (generate on demand only)
 - [x] Frame/`in` coach copy matches UX.md minimum blocks
 
-**Files:** `coach.js`, `chip-defs.js`, `panel.js`, `drawer.js`, `panel.css`
-
 ---
 
 ## Slice 2b — Positive Feedback
@@ -40,8 +38,6 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 - [x] Add `What's working` row under issue chips
 - [x] Show 0–3 positive checks (clear action, bridge, constraint heuristics)
 - [x] Visible even when no issues detected
-
-**Files:** `positive.js`, `panel.js`, `panel.css`
 
 ---
 
@@ -52,8 +48,6 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 - [x] Scaffold prompt on selection (manual fill, no AI auto-generate)
 - [x] Audience selector (Builder, Operator, Business, Reader) as lens on hints
 - [x] Coaching hint line updates with selection
-
-**Files:** `movement.js`, `panel.js`, `panel.css`
 
 ---
 
@@ -67,8 +61,6 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 - [x] Restore prompt on cold start
 - [x] Discard clears workshop only; Hide preserves session
 
-**Files:** `compare.js`, `persistence.js`, `panel.js`, `overlays.css`, `main.js`
-
 ---
 
 ## Slice 5 — Structure Map (Phase 0)
@@ -77,7 +69,49 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 - [x] Classic tree toggle (Structure map | Classic tree)
 - [x] Click sentence scrolls editor
 
-**Files:** `structure-map.js`, `panel.js`, `panel.css`
+---
+
+## Slice 6 — Structure Map Phase 1
+
+- [x] Sentence roles as text badges (Frame, Action, Why, ?)
+- [x] Bridge chains between sentences
+- [x] Movement hints on gaps (missing bridge)
+- [x] Click opens coach Learn for flagged sentence
+
+**Files:** `sentence-roles.js`, `structure-map.js`, `panel.css`
+
+---
+
+## Slice 7 — Apply To Editor
+
+- [x] Diff modal: current editor vs proposed text
+- [x] Default action: Copy to clipboard
+- [x] Replace editor text with undo toast
+- [x] Workshop: Apply to editor button
+- [x] Fix overlay: Apply to editor per row
+
+**Files:** `apply-editor.js`, `compare.js`, `fix.js`, `panel.js`, `overlays.css`
+
+---
+
+## Slice 8 — LLM Task Scaffold
+
+- [x] Builder audience only — collapsible block under movement bar
+- [x] Fields: Location, Target, Action, Constraint
+- [x] Insert scaffold (manual)
+- [x] Generate with AI (optional)
+
+**Files:** `movement.js`, `prompts.js`, `client.js`, `panel.js`, `panel.css`
+
+---
+
+## Slice 9 — Structure Signals (not grammar score)
+
+- [x] Thinking-focused summary: clear roles + bridge count
+- [x] Shown in toolbar and structure map header
+- [x] No grammar percentage or quality score (per UX.md do-not-build)
+
+**Files:** `structure-signals.js`, `sentence-roles.js`, `panel.js`
 
 ---
 
@@ -88,19 +122,17 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 - [x] Generate all with confirmation
 - [x] Editable rewrite cells (textarea)
 - [x] Relabeled chip strip and titles
-
-**Files:** `fix.js`, `overlays.css`
+- [x] Highlight matched phrase in original
+- [x] Why flagged line from coach copy
 
 ---
 
 ## Coach Drawer Tabs (cross-slice)
 
 - [x] Learn | Fix | Guides tab bar
-- [x] Guides tab: long-form reader links
+- [x] Guides tab: long-form reader links + reference examples
 - [x] Fix tab: sentence Smart Fix (from tree selection)
 - [x] Focus return to chip on drawer close
-
-**Files:** `panel.js`, `coach.js`, `drawer.js`, `panel.css`
 
 ---
 
@@ -109,35 +141,20 @@ Track progress by checking boxes. Each slice maps to UX.md acceptance criteria.
 - [x] Status strip: `role="status"`, `aria-live="polite"`
 - [x] Movement bar: radio group + keyboard
 - [x] My draft / AI suggestion: explicit `<label for>`
-- [x] Structure map: `<ol>` / `<li>` semantics
+- [x] Structure map: `<ol>` / `<li>` semantics + role text labels
 
 ---
 
-## Regression Checklist (verify after each AI surface change)
+## Regression Checklist
 
-- [x] Manual mode works with no API key — local analysis + coach; LLM only on Generate
-- [x] LLM failure preserves draft + shows next action — workshop AI lane only; fix keeps `userText`
-- [x] Discard invalidates in-flight LLM — `activeRequestId` bump in `closeCompare`
-- [x] Hide preserves session; Discard clears — `hideCompare` vs `closeCompare` + flush/clear storage
-- [x] User edits during LLM not overwritten — draft lane untouched during Generate
-- [x] Source snapshot frozen at workshop open — `compareSourceText` set at open; chips use snapshot
-- [x] Workshop draft saved before LLM call — `flushPersistWorkshop()` before Generate
-- [x] Restore prompt on cold start — `showRestorePrompt` on mount
-
-Run static verification: `node scripts/ux-regression-check.mjs`
-
----
-
-## Implementation Order
-
-1. Slice 1 + `chip-defs.js`
-2. Slice 2 + `coach.js`
-3. Slice 2b + `positive.js`
-4. Fix overlay manual-first
-5. Slice 3 + `movement.js`
-6. Slice 4 + `persistence.js` + workshop refactor
-7. Slice 5 + `structure-map.js`
-8. Drawer tabs + polish
+- [x] Manual mode works with no API key
+- [x] LLM failure preserves draft + shows next action
+- [x] Discard invalidates in-flight LLM
+- [x] Hide preserves session; Discard clears
+- [x] User edits during LLM not overwritten
+- [x] Source snapshot frozen at workshop open
+- [x] Workshop draft saved before LLM call (flush)
+- [x] Restore prompt on cold start
 
 ---
 
@@ -145,14 +162,15 @@ Run static verification: `node scripts/ux-regression-check.mjs`
 
 | Date | Slice | Notes |
 | --- | --- | --- |
-| 2026-05-30 | 1–5 + cross-slice | Full UX.md implementation on `implement_ux`: new modules, panel/compare/fix rewrite, CSS, task list. Manual regression checklist pending. |
-| 2026-05-30 | Regression | Flush-before-LLM, fix overlay manual-edit preservation, hidden workshop resume, `scripts/ux-regression-check.mjs`. |
+| 2026-05-30 | 1–5 + cross-slice | Core UX.md implementation |
+| 2026-05-30 | Regression | Flush-before-LLM, fix manual-edit preservation |
+| 2026-05-30 | 6–9 | Structure map Phase 1, apply-to-editor, LLM scaffold, structure signals |
 
 ---
 
-## Deferred (per UX.md, not in slices 1–5)
+## Explicitly excluded (UX.md “Do Not Build Yet”)
 
-- Apply-to-editor from workshop or fix overlay
-- LLM task scaffold in movement bar
-- Structure map Phase 1+ (sentence roles, bridge chains)
-- Grammar scores / readability metrics
+- Grammar score / quality percentage
+- Auto-apply AI rewrite without diff
+- Global persistent ignore forever
+- Large onboarding course

@@ -1,4 +1,6 @@
-// Movement intent bar — Move Up / Down / Wide (UX slice 3).
+// Movement intent bar + LLM Task scaffold (Builder audience).
+
+import { callLLM } from '../llm/client.js';
 
 const SCAFFOLDS = {
   up: 'This matters because ___',
@@ -38,8 +40,12 @@ export function wireMovementBar() {
     aud.addEventListener('change', () => {
       selectedAudience = aud.value;
       updateHint();
+      updateLlmScaffoldVisibility();
     });
   }
+
+  document.getElementById('sc-scaffold-insert')?.addEventListener('click', insertLlmScaffold);
+  document.getElementById('sc-scaffold-generate')?.addEventListener('click', generateLlmScaffold);
 }
 
 export function updateMovementBarVisibility(text) {
@@ -51,9 +57,17 @@ export function updateMovementBarVisibility(text) {
     (trimmed.match(/[.!?]/g)?.length >= 1) || trimmed.split(/\s+/).length >= 8
   );
   bar.hidden = !show;
+  updateLlmScaffoldVisibility();
   if (hint && show && !selectedMove) {
     hint.textContent = 'What should your next sentence do?';
   }
+}
+
+function updateLlmScaffoldVisibility() {
+  const block = document.getElementById('sc-llm-scaffold');
+  const bar = document.getElementById('sc-movement-bar');
+  if (!block || !bar) return;
+  block.hidden = bar.hidden || selectedAudience !== 'builder';
 }
 
 function updateHint() {
@@ -77,6 +91,73 @@ function insertScaffold(move) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function scaffoldFields() {
+  return {
+    location: document.getElementById('sc-scaffold-location')?.value.trim() || '___',
+    target: document.getElementById('sc-scaffold-target')?.value.trim() || '___',
+    action: document.getElementById('sc-scaffold-action')?.value.trim() || '___',
+    constraint: document.getElementById('sc-scaffold-constraint')?.value.trim() || '___',
+  };
+}
+
+function buildScaffoldText(f) {
+  return `In ${f.location}, ${f.target} should ${f.action}. Constraint: ${f.constraint}.`;
+}
+
+function insertLlmScaffold() {
+  const text = buildScaffoldText(scaffoldFields());
+  const input = document.getElementById('sc-input');
+  if (!input) return;
+  const prefix = input.value.length && !input.value.endsWith('\n') ? '\n' : '';
+  input.value += prefix + text;
+  input.focus();
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function generateLlmScaffold() {
+  const btn = document.getElementById('sc-scaffold-generate');
+  const status = document.getElementById('sc-scaffold-status');
+  const input = document.getElementById('sc-input');
+  if (!input) return;
+
+  const f = scaffoldFields();
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+  }
+  if (status) {
+    status.textContent = 'AI is drafting a task sentence from your scaffold fields.';
+    status.hidden = false;
+  }
+
+  try {
+    const result = await callLLM({
+      type: 'task-scaffold',
+      text: JSON.stringify(f),
+      context: input.value.slice(-500),
+    });
+    const prefix = input.value.length && !input.value.endsWith('\n') ? '\n' : '';
+    input.value += prefix + result.trim();
+    input.focus();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    if (status) status.textContent = 'Scaffold sentence inserted. Edit to match your truth.';
+  } catch (err) {
+    const msg = typeof err === 'string' ? err : (err?.message || String(err));
+    if (status) {
+      status.innerHTML = `AI unavailable: ${msg}. Use Insert scaffold or keep writing manually.`;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Generate with AI';
+    }
+  }
+}
+
 export function getSelectedMove() {
   return selectedMove;
+}
+
+export function getSelectedAudience() {
+  return selectedAudience;
 }

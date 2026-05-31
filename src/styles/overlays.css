@@ -499,6 +499,122 @@ textarea.sc-compare-ai {
   color: #c0306a;
 }
 
+.sc-fix-original mark {
+  border-radius: 2px;
+}
+
+.sc-fix-apply {
+  align-self: flex-start;
+}
+
+.sc-fix-why {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0e0e0;
+}
+
+.sc-fix-original-wrap {
+  padding: 12px 16px;
+  background: #fdf6f6 !important;
+  border-left: 3px solid #d46a6a;
+}
+
+.sc-fix-original-wrap .sc-fix-original {
+  border-left: none;
+  background: transparent !important;
+  padding: 0;
+}
+
+#sc-apply-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 20, 20, 0.45);
+  z-index: 350;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+#sc-apply-modal.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sc-apply-card {
+  background: #fff;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.sc-apply-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fafafa;
+}
+
+.sc-apply-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.sc-apply-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sc-diff-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.sc-diff-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 6px;
+}
+
+.sc-diff-pre {
+  margin: 0;
+  padding: 10px;
+  background: #f8f8f8;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.sc-apply-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .sc-settings-note-top {
   margin: 0 0 16px;
   color: #666;

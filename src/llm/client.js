@@ -2,7 +2,7 @@
 // this file just builds a prompt from the requested type and dispatches the
 // `llm_call` Tauri command.
 
-import { buildSentenceRefactorPrompt, buildFullRewritePrompt } from './prompts.js';
+import { buildSentenceRefactorPrompt, buildFullRewritePrompt, buildTaskScaffoldPrompt } from './prompts.js';
 import { getConfig } from './settings.js';
 
 export async function callLLM({ type, text, context }) {
@@ -12,7 +12,9 @@ export async function callLLM({ type, text, context }) {
   const { provider, baseUrl, model } = getConfig();
   const prompt = type === 'rewrite-full'
     ? buildFullRewritePrompt(text)
-    : buildSentenceRefactorPrompt(text, context);
+    : type === 'task-scaffold'
+      ? buildTaskScaffoldPrompt(text, context || '')
+      : buildSentenceRefactorPrompt(text, context);
 
   return inv('llm_call', {
     req: {

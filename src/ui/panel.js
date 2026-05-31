@@ -18,6 +18,7 @@ import {
   insertIntoDraft,
   insertWorkshopScaffold,
   restoreWorkshopSession,
+  openWorkshopApply,
 } from './overlays/compare.js';
 import { openFixOverlay, closeFixOverlay, retryFixRow } from './overlays/fix.js';
 import { openSettingsModal, closeSettingsModal, wireSettingsModal } from './settings-modal.js';
@@ -31,6 +32,8 @@ import { computePositiveChecks, renderPositiveRow } from './positive.js';
 import { wireMovementBar, updateMovementBarVisibility } from './movement.js';
 import { saveMainDraft, showRestorePrompt } from './persistence.js';
 import { renderStructureMap, wirePanelViewToggle } from './structure-map.js';
+import { renderStructureSignals } from './structure-signals.js';
+import { wireApplyEditor } from './apply-editor.js';
 
 let lastSentences = [];
 let lastText = '';
@@ -51,6 +54,7 @@ export function mountPanel(root) {
   wireCoachTabs();
   wireMovementBar();
   wirePanelViewToggle();
+  wireApplyEditor();
   window.__sc_refreshKeyState = refreshKeyState;
   refreshKeyState();
 
@@ -108,6 +112,7 @@ function wireEvents(root) {
   document.getElementById('sc-compare-insert-replace')?.addEventListener('click', () => insertIntoDraft('replace'));
   document.getElementById('sc-compare-insert-append')?.addEventListener('click', () => insertIntoDraft('append'));
   document.getElementById('sc-compare-insert-selection')?.addEventListener('click', () => insertIntoDraft('selection'));
+  document.getElementById('sc-compare-apply')?.addEventListener('click', openWorkshopApply);
   document.querySelectorAll('[data-workshop-scaffold]').forEach(btn => {
     btn.addEventListener('click', () => insertWorkshopScaffold(btn.dataset.workshopScaffold));
   });
@@ -240,6 +245,7 @@ function updateUI(input, layer) {
   const aiBtn = document.getElementById('sc-ai-rewrite');
   const report = document.getElementById('sc-error-count');
   const positive = document.getElementById('sc-positive-row');
+  const signals = document.getElementById('sc-structure-signals');
 
   copyBtn.disabled = !text.trim();
   if (aiBtn) aiBtn.disabled = !text.trim();
@@ -256,6 +262,8 @@ function updateUI(input, layer) {
     renderTree(sentences);
     renderStructureMap(sentences);
     renderPositiveRow(positive, computePositiveChecks(text, sentences));
+    renderStructureSignals(signals, sentences);
+    renderStructureSignals(document.getElementById('sc-structure-signals-map'), sentences);
 
     const wordCount = text.match(/\S+/g)?.length || 0;
     if (wordCount === 0) {
@@ -317,6 +325,20 @@ function panelMarkup() {
                 </select>
               </div>
             </div>
+            <div id="sc-llm-scaffold" class="sc-llm-scaffold" hidden>
+              <div class="sc-llm-scaffold-title">LLM Task scaffold</div>
+              <div class="sc-llm-scaffold-fields">
+                <label>Location<input type="text" id="sc-scaffold-location" placeholder="Welcome view" /></label>
+                <label>Target<input type="text" id="sc-scaffold-target" placeholder="Tips section" /></label>
+                <label>Action<input type="text" id="sc-scaffold-action" placeholder="sort the list" /></label>
+                <label>Constraint<input type="text" id="sc-scaffold-constraint" placeholder="do not change order elsewhere" /></label>
+              </div>
+              <div class="sc-llm-scaffold-actions">
+                <button type="button" id="sc-scaffold-insert" class="sc-btn sc-btn-secondary sc-btn-sm">Insert scaffold</button>
+                <button type="button" id="sc-scaffold-generate" class="sc-btn sc-btn-secondary sc-btn-sm">Generate with AI</button>
+              </div>
+              <div id="sc-scaffold-status" class="sc-scaffold-status" hidden role="status" aria-live="polite"></div>
+            </div>
             <div id="sc-editor-wrap">
               <div id="sc-highlight-layer" aria-hidden="true"></div>
               <textarea id="sc-input" placeholder="Start writing here..." aria-label="Main editor"></textarea>
@@ -325,6 +347,7 @@ function panelMarkup() {
               <div id="sc-chips-wrap">
                 <div id="sc-error-count"></div>
                 <div id="sc-positive-row" hidden></div>
+                <div id="sc-structure-signals" hidden></div>
               </div>
               <div id="sc-actions">
                 <button id="sc-ai-rewrite" class="sc-btn sc-btn-primary sc-btn-ai" disabled>Rewrite…</button>
@@ -341,6 +364,7 @@ function panelMarkup() {
               <button type="button" class="sc-panel-view-btn" data-view="tree">Classic tree</button>
             </div>
             <div id="sc-structure-map">
+              <div id="sc-structure-signals-map" class="sc-structure-signals-map" hidden></div>
               <ol id="sc-structure-list" class="sc-structure-list"></ol>
             </div>
             <div id="sc-tree-container" hidden>
@@ -463,6 +487,7 @@ function panelMarkup() {
             <div id="sc-compare-title">Rewrite Workshop</div>
             <div id="sc-compare-actions">
               <button id="sc-compare-copy" class="sc-btn sc-btn-secondary">Copy my draft</button>
+              <button id="sc-compare-apply" class="sc-btn sc-btn-secondary">Apply to editor</button>
               <button id="sc-compare-hide-btn" class="sc-btn sc-btn-secondary">Hide workshop</button>
               <button id="sc-compare-close-btn" class="sc-btn sc-btn-secondary">Discard workshop</button>
             </div>
@@ -494,6 +519,24 @@ function panelMarkup() {
               </div>
             </div>
           </div>
+        </div>
+        <div id="sc-apply-modal" role="dialog" aria-modal="true" aria-labelledby="sc-apply-title" aria-hidden="true">
+          <div class="sc-apply-card">
+            <header class="sc-apply-header">
+              <h2 id="sc-apply-title">Apply to editor</h2>
+              <button type="button" id="sc-apply-modal-close" class="sc-btn sc-btn-secondary" aria-label="Close">&times;</button>
+            </header>
+            <div id="sc-apply-body" class="sc-apply-body"></div>
+            <footer class="sc-apply-footer">
+              <button type="button" id="sc-apply-copy" class="sc-btn sc-btn-primary">Copy to clipboard</button>
+              <button type="button" id="sc-apply-replace" class="sc-btn sc-btn-secondary">Replace editor text</button>
+              <button type="button" id="sc-apply-cancel" class="sc-btn sc-btn-secondary">Cancel</button>
+            </footer>
+          </div>
+        </div>
+        <div id="sc-undo-toast" hidden role="status" aria-live="polite">
+          Applied to editor.
+          <button type="button" id="sc-undo-btn" class="sc-link-btn">Undo</button>
         </div>
         <div id="sc-settings-modal" role="dialog" aria-modal="true" aria-labelledby="sc-settings-title" aria-hidden="true">
           <div class="sc-settings-card">

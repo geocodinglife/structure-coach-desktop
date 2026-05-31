@@ -278,6 +278,17 @@ export function getCompareSourceText() {
   return compareSourceText;
 }
 
+export function openWorkshopApply() {
+  const draft = document.getElementById('sc-compare-rewrite');
+  const input = document.getElementById('sc-input');
+  if (!draft || !input || !draft.value.trim()) return;
+  import('../apply-editor.js').then(m => m.openApplyDiff({
+    title: 'Apply workshop draft to editor',
+    before: input.value,
+    after: draft.value,
+  }));
+}
+
 export function refreshCompareResumeButton() {
   updateResumeButton();
 }

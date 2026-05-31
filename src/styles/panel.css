@@ -746,3 +746,123 @@ mark.sc-hl-pulse {
   padding: 4px 10px;
   font-size: 12px;
 }
+
+/* LLM Task scaffold (Builder audience) */
+.sc-llm-scaffold {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: #f3f4fb;
+  border: 1px solid #d8dcf0;
+  border-radius: 8px;
+}
+
+.sc-llm-scaffold-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #3f51b5;
+  margin-bottom: 8px;
+}
+
+.sc-llm-scaffold-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sc-llm-scaffold-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+}
+
+.sc-llm-scaffold-fields input {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid #d8d0c8;
+  border-radius: 5px;
+}
+
+.sc-llm-scaffold-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sc-scaffold-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #555;
+}
+
+#sc-structure-signals,
+.sc-structure-signals-map {
+  font-size: 12px;
+  color: #555;
+  padding: 4px 0;
+}
+
+.sc-signals-label {
+  font-weight: 600;
+  color: #3f51b5;
+}
+
+.sc-structure-signals-map {
+  padding: 8px 16px;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+}
+
+.sc-structure-item {
+  flex-wrap: wrap;
+}
+
+.sc-structure-role {
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.sc-structure-role--frame { background: #fff3e0; color: #e65100; }
+.sc-structure-role--action { background: #e8f5e9; color: #2e7d32; }
+.sc-structure-role--why { background: #e3f2fd; color: #1565c0; }
+.sc-structure-role--unknown { background: #f5f5f5; color: #777; }
+
+.sc-structure-bridge,
+.sc-structure-move-hint {
+  width: 100%;
+  padding: 2px 16px 6px 54px;
+  font-size: 11px;
+  color: #888;
+}
+
+.sc-structure-move-hint {
+  color: #5c6bc0;
+  font-style: italic;
+}
+
+#sc-undo-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2a2a2a;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 400;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+#sc-undo-toast .sc-link-btn {
+  color: #90caf9;
+  margin-left: 8px;
+}

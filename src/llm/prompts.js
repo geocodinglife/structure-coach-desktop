@@ -37,3 +37,24 @@ TEXT:
 ${text}
 """`;
 }
+
+export function buildTaskScaffoldPrompt(fieldsJson, context) {
+  const f = JSON.parse(fieldsJson);
+  return `You are a writing coach for technical instructions aimed at an LLM or builder audience.
+
+Using ONLY the fields below (replace ___ with sensible placeholders if still blank), write ONE clear sentence following:
+Location → Target → Action → Constraint
+
+Fields:
+- Location: ${f.location}
+- Target: ${f.target}
+- Action: ${f.action}
+- Constraint: ${f.constraint}
+
+Recent document context (for tone only, do not copy verbatim):
+"""
+${context}
+"""
+
+Return ONLY the single sentence. No quotes, no preamble.`;
+}

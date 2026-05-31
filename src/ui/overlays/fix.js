@@ -1,6 +1,8 @@
 // Per-rule fix overlay — manual-first, generate on demand.
 
 import { callLLM } from '../../llm/client.js';
+import { analyzeText } from '../../analysis/analyzer.js';
+import { getChipDef } from '../chip-defs.js';
 import { CHIP_DEFS } from '../chip-defs.js';
 
 const RULE_TITLES = Object.fromEntries(
@@ -133,10 +135,22 @@ function renderRowsForCls(cls) {
     row.dataset.cls = cls;
     row.dataset.key = key;
 
+    const origWrap = document.createElement('div');
+    origWrap.className = 'sc-fix-original-wrap';
+
     const orig = document.createElement('div');
     orig.className = 'sc-fix-original';
-    orig.textContent = sent.text.trim();
-    row.appendChild(orig);
+    const mini = analyzeText(sent.text);
+    orig.innerHTML = mini.html.replace(/<br>\s*$/, '');
+    origWrap.appendChild(orig);
+
+    const why = document.createElement('div');
+    why.className = 'sc-fix-why';
+    const def = getChipDef(cls);
+    why.textContent = def?.coach?.detected || 'Flagged by structure check.';
+    origWrap.appendChild(why);
+
+    row.appendChild(origWrap);
 
     const rewriteWrap = document.createElement('div');
     rewriteWrap.className = 'sc-fix-rewrite-wrap';
@@ -163,6 +177,17 @@ function renderRowsForCls(cls) {
     genBtn.disabled = cached.state === 'pending';
     genBtn.addEventListener('click', () => generateRow(cls, key));
     rewriteWrap.appendChild(genBtn);
+
+    const applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
+    applyBtn.className = 'sc-btn sc-btn-secondary sc-fix-apply';
+    applyBtn.textContent = 'Apply to editor';
+    applyBtn.addEventListener('click', () => {
+      const rewrite = ta.value.trim();
+      if (!rewrite) return;
+      import('../apply-editor.js').then(m => m.applySentenceReplace(sent.text, rewrite));
+    });
+    rewriteWrap.appendChild(applyBtn);
 
     if (cached.state === 'error' && cached.errorMsg) {
       const err = document.createElement('div');
