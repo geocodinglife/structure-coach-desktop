@@ -62,9 +62,11 @@ export function openDrawerForSentence(sentence) {
   const aiBtn = drawer.querySelector('#sc-ai-refactor-btn');
   const aiResult = drawer.querySelector('#sc-ai-result');
 
-  if (aiTarget) aiTarget.textContent = `Target: "${sentence.text.substring(0, 50)}..."`;
+  if (aiTarget) aiTarget.textContent = `Target: "${sentence.text.substring(0, 80)}${sentence.text.length > 80 ? '…' : ''}"`;
   if (aiBtn) aiBtn.disabled = false;
   if (aiResult) aiResult.hidden = true;
+
+  import('./coach.js').then(m => m.setCoachTab('fix'));
 
   const focusIds = sentence.stats
     .filter(s => s.count > 0)

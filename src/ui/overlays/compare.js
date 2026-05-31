@@ -1,13 +1,16 @@
-// AI-rewrite comparison overlay (original vs AI side-by-side).
+// Rewrite Workshop — manual draft + optional AI suggestion lanes.
 
 import { analyzeText } from '../../analysis/analyzer.js';
 import { callLLM } from '../../llm/client.js';
+import { CHIP_DEFS, getChipDef, chipAriaLabel } from '../chip-defs.js';
+import { saveWorkshopDraft, clearWorkshopDraft } from '../persistence.js';
 
 let rewriteDirty = false;
 let suppressRewriteInput = false;
 let activeRequestId = 0;
 let compareHasSession = false;
 let compareSourceText = '';
+let aiSuggestionText = '';
 
 function errMsg(e) {
   if (typeof e === 'string') return e;
@@ -15,50 +18,132 @@ function errMsg(e) {
   return String(e);
 }
 
-export async function rewriteFullText() {
+export function openWorkshop() {
   const input = document.getElementById('sc-input');
-  const btn = document.getElementById('sc-ai-rewrite');
-  if (!input || !btn) return;
-  const text = input.value.trim();
-  if (!text) return;
-
-  btn.dataset.busy = '1';
-  btn.disabled = true;
-  const originalLabel = btn.textContent;
-  btn.textContent = 'Rewriting…';
-
+  if (!input || !input.value.trim()) return;
   const sourceText = input.value;
-  const requestId = ++activeRequestId;
   showCompare(sourceText, sourceText, {
-    rewriteReady: false,
-    statusText: 'Generating AI rewrite. You can edit this draft while it works.'
+    rewriteReady: true,
+    statusText: 'Edit your draft, or click Generate for an AI suggestion.',
+    openAiEmpty: true,
   });
+}
+
+export async function generateWorkshopSuggestion() {
+  if (!compareSourceText) return;
+  const btn = document.getElementById('sc-compare-generate');
+  const statusEl = document.getElementById('sc-compare-status');
+  const aiEl = document.getElementById('sc-compare-ai');
+  if (!aiEl) return;
+
+  persistWorkshop();
+
+  const requestId = ++activeRequestId;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+  }
+  if (statusEl) {
+    statusEl.textContent = 'AI is drafting a suggestion. Your draft will not be overwritten.';
+    statusEl.hidden = false;
+  }
 
   try {
-    const result = await callLLM({ type: 'rewrite-full', text: sourceText, context: '' });
-    if (requestId === activeRequestId && !rewriteDirty) {
-      updateCompareContent(sourceText, result, { rewriteReady: true, statusText: '' });
-    } else if (requestId === activeRequestId) {
-      setCompareStatus('AI rewrite finished, but your manual edits were kept.');
+    const result = await callLLM({ type: 'rewrite-full', text: compareSourceText, context: '' });
+    if (requestId !== activeRequestId) return;
+    aiSuggestionText = result;
+    aiEl.value = result;
+    if (statusEl) {
+      statusEl.textContent = 'Suggestion ready. Review before inserting into your draft.';
+      statusEl.hidden = false;
     }
   } catch (err) {
-    if (requestId === activeRequestId) {
-      updateCompareContent(sourceText, sourceText, {
-        rewriteReady: true,
-        preserveDirty: true,
-        statusText: 'AI rewrite failed: ' + errMsg(err) + '. Edit the draft manually.'
+    if (requestId !== activeRequestId) return;
+    if (statusEl) {
+      statusEl.innerHTML = 'AI unavailable: ' + esc(errMsg(err)) +
+        ' <button type="button" class="sc-link-btn" id="sc-status-settings">Open Settings</button> ' +
+        'Keep editing your draft manually.';
+      statusEl.hidden = false;
+      statusEl.querySelector('#sc-status-settings')?.addEventListener('click', () => {
+        import('../settings-modal.js').then(m => m.openSettingsModal());
       });
     }
   } finally {
-    btn.textContent = originalLabel;
-    delete btn.dataset.busy;
-    btn.disabled = !input.value.trim();
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Generate';
+    }
+    persistWorkshop();
   }
+}
+
+export function insertIntoDraft(mode) {
+  const draft = document.getElementById('sc-compare-rewrite');
+  const aiEl = document.getElementById('sc-compare-ai');
+  if (!draft || !aiEl) return;
+  const suggestion = aiEl.value.trim();
+  if (!suggestion) return;
+
+  if (mode === 'append') {
+    const sep = draft.value.trim() ? '\n\n' : '';
+    draft.value += sep + suggestion;
+  } else if (mode === 'selection') {
+    const start = draft.selectionStart;
+    const end = draft.selectionEnd;
+    if (start === end) return;
+    draft.value = draft.value.slice(0, start) + suggestion + draft.value.slice(end);
+  } else {
+    if (draft.value.trim() && !confirm('Replace all of your draft with the AI suggestion?')) return;
+    draft.value = suggestion;
+  }
+  draft.focus();
+  markRewriteDirty();
+  persistWorkshop();
+}
+
+export function insertWorkshopScaffold(kind) {
+  const draft = document.getElementById('sc-compare-rewrite');
+  if (!draft) return;
+  const scaffolds = {
+    up: 'This matters because ___',
+    down: 'Do this: ___ in ___',
+    wide: 'Check whether ___ also applies to ___',
+  };
+  const s = scaffolds[kind];
+  if (!s) return;
+  const sep = draft.value.trim() && !draft.value.endsWith('\n') ? '\n' : '';
+  draft.value += sep + s;
+  const idx = draft.value.indexOf('___');
+  if (idx !== -1) draft.setSelectionRange(idx, idx + 3);
+  draft.focus();
+  markRewriteDirty();
+  persistWorkshop();
+}
+
+/** @deprecated use openWorkshop — kept for toolbar id compatibility */
+export async function rewriteFullText() {
+  openWorkshop();
 }
 
 export function showCompare(originalText, rewriteText, options = {}) {
   updateCompareContent(originalText, rewriteText, options);
   openStoredCompare();
+}
+
+export function restoreWorkshopSession(data) {
+  if (!data?.sourceText) return;
+  compareSourceText = data.sourceText;
+  compareHasSession = true;
+  updateCompareContent(data.sourceText, data.myDraft || data.sourceText, {
+    rewriteReady: true,
+    statusText: 'Restored rewrite workshop.',
+    preserveDirty: true,
+  });
+  const aiEl = document.getElementById('sc-compare-ai');
+  if (aiEl && data.aiSuggestion) {
+    aiSuggestionText = data.aiSuggestion;
+    aiEl.value = data.aiSuggestion;
+  }
 }
 
 export function openStoredCompare() {
@@ -73,41 +158,66 @@ export function openStoredCompare() {
 function updateCompareContent(originalText, rewriteText, {
   rewriteReady = false,
   statusText = '',
-  preserveDirty = false
+  preserveDirty = false,
+  openAiEmpty = false,
 } = {}) {
-  const overlay = document.getElementById('sc-compare-overlay');
   const originalEl = document.getElementById('sc-compare-original');
   const issuesEl = document.getElementById('sc-compare-issues');
   const rewriteEl = document.getElementById('sc-compare-rewrite');
+  const aiEl = document.getElementById('sc-compare-ai');
   const copyBtn = document.getElementById('sc-compare-copy');
   const statusEl = document.getElementById('sc-compare-status');
-  if (!overlay || !originalEl || !rewriteEl || !copyBtn) return;
+  if (!originalEl || !rewriteEl || !copyBtn) return;
+
   const analysis = analyzeText(originalText);
   originalEl.innerHTML = analysis.html;
   renderIssueSummary(issuesEl, analysis.stats);
+
   if (!preserveDirty || !rewriteDirty) {
     setRewriteValue(rewriteEl, rewriteText);
     rewriteDirty = false;
   }
   rewriteEl.classList.toggle('sc-compare-pending', !rewriteReady);
-  copyBtn.disabled = !rewriteReady;
+  copyBtn.disabled = false;
+
+  if (aiEl && openAiEmpty) {
+    aiSuggestionText = '';
+    aiEl.value = '';
+  }
+
   compareSourceText = originalText;
   if (statusEl) {
     statusEl.textContent = statusText;
     statusEl.hidden = !statusText;
+    statusEl.setAttribute('role', 'status');
+    statusEl.setAttribute('aria-live', 'polite');
   }
   compareHasSession = true;
   updateResumeButton();
+  persistWorkshop();
+}
+
+function persistWorkshop() {
+  if (!compareHasSession) return;
+  const draft = document.getElementById('sc-compare-rewrite');
+  const aiEl = document.getElementById('sc-compare-ai');
+  saveWorkshopDraft({
+    sourceText: compareSourceText,
+    myDraft: draft?.value || '',
+    aiSuggestion: aiEl?.value || aiSuggestionText || '',
+  });
 }
 
 export function markRewriteDirty() {
   if (suppressRewriteInput) return;
   rewriteDirty = true;
+  persistWorkshop();
 }
 
 export function hideCompare() {
   const overlay = document.getElementById('sc-compare-overlay');
   if (!overlay) return;
+  persistWorkshop();
   overlay.classList.remove('open');
   overlay.setAttribute('aria-hidden', 'true');
   updateResumeButton();
@@ -116,23 +226,11 @@ export function hideCompare() {
 function setRewriteValue(el, value) {
   suppressRewriteInput = true;
   try {
-    if ('value' in el) {
-      el.value = value;
-    } else {
-      el.textContent = value;
-    }
+    if ('value' in el) el.value = value;
+    else el.textContent = value;
   } finally {
     suppressRewriteInput = false;
   }
-}
-
-function setCompareStatus(message) {
-  const statusEl = document.getElementById('sc-compare-status');
-  const rewriteEl = document.getElementById('sc-compare-rewrite');
-  if (rewriteEl) rewriteEl.classList.remove('sc-compare-pending');
-  if (!statusEl) return;
-  statusEl.textContent = message;
-  statusEl.hidden = !message;
 }
 
 export function closeCompare() {
@@ -140,6 +238,7 @@ export function closeCompare() {
   const originalEl = document.getElementById('sc-compare-original');
   const issuesEl = document.getElementById('sc-compare-issues');
   const rewriteEl = document.getElementById('sc-compare-rewrite');
+  const aiEl = document.getElementById('sc-compare-ai');
   const statusEl = document.getElementById('sc-compare-status');
   if (overlay) {
     overlay.classList.remove('open');
@@ -148,6 +247,7 @@ export function closeCompare() {
   if (originalEl) originalEl.textContent = '';
   if (issuesEl) issuesEl.innerHTML = '';
   if (rewriteEl) setRewriteValue(rewriteEl, '');
+  if (aiEl) aiEl.value = '';
   if (statusEl) {
     statusEl.textContent = '';
     statusEl.hidden = true;
@@ -155,7 +255,9 @@ export function closeCompare() {
   rewriteDirty = false;
   compareHasSession = false;
   compareSourceText = '';
+  aiSuggestionText = '';
   activeRequestId += 1;
+  clearWorkshopDraft();
   updateResumeButton();
 }
 
@@ -170,32 +272,21 @@ export function refreshCompareResumeButton() {
 function renderIssueSummary(el, stats) {
   if (!el) return;
   const parts = [];
-  const weakCount = stats
-    .filter(s => s.cls === 'sc-hl-pass')
-    .reduce((sum, s) => sum + s.count, 0);
+  const countByCls = (cls) => stats.find(s => s.cls === cls)?.count || 0;
 
-  const addChip = (variant, cls, label, count) => {
-    if (count > 0) {
-      parts.push(`<span class="sc-stat sc-stat--${variant}" data-cls="${cls}">${label}: ${count}</span>`);
+  CHIP_DEFS.forEach(def => {
+    let count = countByCls(def.cls);
+    if (def.cls === 'sc-hl-pass') {
+      count = stats.filter(s => s.cls === 'sc-hl-pass').reduce((n, s) => n + s.count, 0);
     }
-  };
-
-  addChip('pass', 'sc-hl-pass', 'Weak', weakCount);
-  addRuleChip(parts, stats, 'sc-hl-prep', 'prep', 'Prep');
-  addRuleChip(parts, stats, 'sc-hl-nom', 'nom', 'Nom');
-  addRuleChip(parts, stats, 'sc-hl-fill', 'fill', 'Fill');
-  addRuleChip(parts, stats, 'sc-hl-needless', 'needless', 'Needless');
-  addRuleChip(parts, stats, 'sc-hl-spine', 'spine', 'Spine');
-  addRuleChip(parts, stats, 'sc-hl-stack', 'stack', 'Stack');
-  addRuleChip(parts, stats, 'sc-hl-flow', 'flow', 'Flow');
+    if (count > 0) {
+      parts.push(
+        `<button type="button" class="sc-stat sc-stat--${def.variant}" data-cls="${def.cls}" ` +
+        `aria-label="${chipAriaLabel(def.label, count)}">${def.label}: ${count}</button>`,
+      );
+    }
+  });
   el.innerHTML = parts.join(' ');
-}
-
-function addRuleChip(parts, stats, cls, variant, label) {
-  const rule = stats.find(s => s.cls === cls);
-  if (rule && rule.count > 0) {
-    parts.push(`<span class="sc-stat sc-stat--${variant}" data-cls="${cls}">${label}: ${rule.count}</span>`);
-  }
 }
 
 function updateResumeButton() {
@@ -211,4 +302,8 @@ function updateResumeButton() {
     reader?.classList.contains('open') ||
     settings?.classList.contains('open');
   resumeBtn.hidden = !compareHasSession || isOpen || blockingOverlayOpen;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

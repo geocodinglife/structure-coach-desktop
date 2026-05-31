@@ -415,6 +415,96 @@ textarea.sc-compare-text.sc-compare-pending {
   font-style: italic;
 }
 
+.sc-compare-col-draft {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sc-workshop-scaffolds {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 18px 0;
+  flex-shrink: 0;
+}
+
+.sc-ai-lane {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-top: 1px solid #eee;
+  margin-top: 8px;
+  min-height: 0;
+}
+
+.sc-ai-lane-title {
+  margin-top: 8px;
+}
+
+textarea.sc-compare-ai {
+  flex: 0 0 auto;
+  min-height: 100px;
+  max-height: 160px;
+  background: #f8f8f8;
+  color: #444;
+}
+
+.sc-ai-lane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 18px 12px;
+}
+
+.sc-link-btn {
+  border: 0;
+  background: none;
+  color: #3f51b5;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.sc-fix-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sc-fix-rewrite-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sc-fix-rewrite-input {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px;
+  border: 1px solid #e0d8d0;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.sc-fix-generate {
+  align-self: flex-start;
+}
+
+.sc-fix-error-msg {
+  font-size: 12px;
+  color: #c0306a;
+}
+
+.sc-settings-note-top {
+  margin: 0 0 16px;
+  color: #666;
+  font-size: 13px;
+}
+
 /* Stack the two columns vertically when window is narrow (e.g. half-screen tile) */
 @media (max-width: 900px) {
   #sc-compare-body {
