@@ -3,6 +3,7 @@
 // via the `set_api_key` Tauri command.
 
 import { getConfig, setConfig, getApiKey, setApiKey } from '../llm/settings.js';
+import { refreshCompareResumeButton } from './overlays/compare.js';
 
 const PRESETS = {
   gemini: {
@@ -45,6 +46,7 @@ export async function openSettingsModal() {
   syncProviderUI(modal);
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
+  refreshCompareResumeButton();
   setTimeout(() => modal.querySelector('#sc-settings-key').focus(), 50);
 }
 
@@ -53,6 +55,7 @@ export function closeSettingsModal() {
   if (modal) {
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
+    refreshCompareResumeButton();
   }
 }
 

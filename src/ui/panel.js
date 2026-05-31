@@ -7,7 +7,15 @@ import { renderTree } from './tree.js';
 import { makeGlyphIcon } from './glyphs.js';
 import { refactorSelectedSentence, closeDrawer } from './drawer.js';
 import { openReader, closeReader } from './overlays/reader.js';
-import { rewriteFullText, closeCompare } from './overlays/compare.js';
+import {
+  rewriteFullText,
+  closeCompare,
+  hideCompare,
+  openStoredCompare,
+  markRewriteDirty,
+  getCompareSourceText,
+  refreshCompareResumeButton,
+} from './overlays/compare.js';
 import { openFixOverlay, closeFixOverlay, retryFixRow } from './overlays/fix.js';
 import { openSettingsModal, closeSettingsModal, wireSettingsModal } from './settings-modal.js';
 import { getApiKey } from '../llm/settings.js';
@@ -70,6 +78,10 @@ function wireEvents(root) {
   });
 
   document.getElementById('sc-ai-rewrite').addEventListener('click', rewriteFullText);
+  const compareResume = document.getElementById('sc-compare-resume');
+  const compareRewrite = document.getElementById('sc-compare-rewrite');
+  if (compareResume) compareResume.addEventListener('click', openStoredCompare);
+  if (compareRewrite) compareRewrite.addEventListener('input', markRewriteDirty);
 
   document.getElementById('sc-settings-btn').addEventListener('click', openSettingsModal);
 
@@ -85,31 +97,55 @@ function wireEvents(root) {
 
   document.getElementById('sc-reader-toggle').addEventListener('click', () => {
     openReader('Paramedic Method: Full Guide', getParamedicMethodHTML());
+    refreshCompareResumeButton();
   });
   document.getElementById('sc-reader-advanced-toggle').addEventListener('click', () => {
     openReader('Advanced Structure Guide: Spine & Flow', getAdvancedStructureHTML());
+    refreshCompareResumeButton();
   });
   document.getElementById('sc-reader-bdd-toggle').addEventListener('click', () => {
     openReader('Scenario Scaffold: Protagonist-First Writing', getBDDGuidanceHTML());
+    refreshCompareResumeButton();
   });
 
   document.addEventListener('click', (e) => {
     const t = e.target;
     if (!(t instanceof Element)) return;
     if (t.closest('#sc-drawer-close')) { closeDrawer(); return; }
-    if (t.closest('#sc-reader-close-btn, .sc-reader-close-footer')) { closeReader(); return; }
+    if (t.closest('#sc-reader-close-btn, .sc-reader-close-footer')) {
+      closeReader();
+      refreshCompareResumeButton();
+      return;
+    }
+    if (t.closest('#sc-compare-hide-btn')) { hideCompare(); return; }
     if (t.closest('#sc-compare-close-btn')) { closeCompare(); return; }
-    if (t.closest('#sc-fix-close-btn')) { closeFixOverlay(); return; }
+    if (t.closest('#sc-fix-close-btn')) {
+      closeFixOverlay();
+      refreshCompareResumeButton();
+      return;
+    }
     if (t.closest('#sc-setup-dismiss')) {
       const b = document.getElementById('sc-setup-banner');
       if (b) { b.dataset.dismissed = '1'; b.style.display = 'none'; }
       return;
     }
     if (t.closest('#sc-setup-open')) { openSettingsModal(); return; }
+    const compareChip = t.closest('#sc-compare-issues .sc-stat');
+    if (compareChip) {
+      const cls = compareChip.dataset.cls;
+      const src = getCompareSourceText();
+      if (cls && src) {
+        const { sentences } = analyzeText(src);
+        openFixOverlay(cls, sentences, src);
+        refreshCompareResumeButton();
+      }
+      return;
+    }
     const fixChip = t.closest('#sc-fix-chips .sc-stat');
     if (fixChip) {
       const cls = fixChip.dataset.cls;
       if (cls) openFixOverlay(cls, lastSentences, lastText);
+      refreshCompareResumeButton();
       return;
     }
     const retry = t.closest('.sc-fix-retry');
@@ -122,7 +158,7 @@ function wireEvents(root) {
   document.getElementById('sc-compare-copy').addEventListener('click', () => {
     const rewriteEl = document.getElementById('sc-compare-rewrite');
     if (!rewriteEl) return;
-    navigator.clipboard.writeText(rewriteEl.textContent || '');
+    navigator.clipboard.writeText(rewriteEl.value || rewriteEl.textContent || '');
     const btn = document.getElementById('sc-compare-copy');
     const original = btn.textContent;
     btn.textContent = 'Copied!';
@@ -151,11 +187,13 @@ function wireEvents(root) {
     if (settings && settings.classList.contains('open')) {
       closeSettingsModal();
     } else if (compare && compare.classList.contains('open')) {
-      closeCompare();
+      hideCompare();
     } else if (reader && reader.classList.contains('open')) {
       closeReader();
+      refreshCompareResumeButton();
     } else if (fix && fix.classList.contains('open')) {
       closeFixOverlay();
+      refreshCompareResumeButton();
     } else if (drawer && drawer.classList.contains('open')) {
       closeDrawer();
     } else {
@@ -251,6 +289,7 @@ function panelMarkup() {
             </div>
           </div>
         </div>
+        <button id="sc-compare-resume" class="sc-btn sc-btn-primary sc-compare-resume" hidden>Open Rewrite Draft</button>
         <div id="sc-drawer" role="dialog" aria-modal="false" aria-labelledby="sc-drawer-title" aria-hidden="true">
           <div id="sc-drawer-header">
             <div id="sc-drawer-title">Reference Guide</div>
@@ -349,18 +388,21 @@ function panelMarkup() {
           <div id="sc-compare-header">
             <div id="sc-compare-title">AI Rewrite — Compare</div>
             <div id="sc-compare-actions">
-              <button id="sc-compare-copy" class="sc-btn sc-btn-secondary" disabled>Copy AI Rewrite</button>
-              <button id="sc-compare-close-btn" class="sc-btn sc-btn-secondary">Close</button>
+              <button id="sc-compare-copy" class="sc-btn sc-btn-secondary" disabled>Copy Rewrite</button>
+              <button id="sc-compare-hide-btn" class="sc-btn sc-btn-secondary">Hide</button>
+              <button id="sc-compare-close-btn" class="sc-btn sc-btn-secondary">Discard</button>
             </div>
           </div>
           <div id="sc-compare-body">
             <div class="sc-compare-col">
               <div class="sc-compare-col-title">Your text</div>
+              <div id="sc-compare-issues" class="sc-compare-issues"></div>
               <div id="sc-compare-original" class="sc-compare-text"></div>
             </div>
             <div class="sc-compare-col">
-              <div class="sc-compare-col-title">AI rewrite <span class="sc-compare-col-hint">(read-only — retype to learn)</span></div>
-              <div id="sc-compare-rewrite" class="sc-compare-text"></div>
+              <div class="sc-compare-col-title">Rewrite <span class="sc-compare-col-hint">(editable)</span></div>
+              <div id="sc-compare-status" class="sc-compare-status" hidden></div>
+              <textarea id="sc-compare-rewrite" class="sc-compare-text" spellcheck="true"></textarea>
             </div>
           </div>
         </div>
